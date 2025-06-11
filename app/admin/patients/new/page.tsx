@@ -20,6 +20,8 @@ export default function NewPatientPage() {
   const [patient, setPatient] = useState({
     firstName: "",
     lastName: "",
+    username: "",
+    password: "",
     nationalityId: "",
     dateOfBirth: "",
     email: "",
@@ -61,6 +63,8 @@ export default function NewPatientPage() {
     if (
       !patient.firstName ||
       !patient.lastName ||
+      !patient.username ||
+      !patient.password ||
       !patient.nationalityId ||
       !patient.dateOfBirth ||
       !patient.email ||
@@ -81,6 +85,8 @@ export default function NewPatientPage() {
       const patientData = {
         first_name: patient.firstName,
         last_name: patient.lastName,
+        username: patient.username,
+        password: patient.password,
         nationality_id: Number.parseInt(patient.nationalityId),
         date_of_birth: patient.dateOfBirth,
         email: patient.email,
@@ -149,6 +155,36 @@ export default function NewPatientPage() {
                 value={patient.lastName}
                 onChange={handleInputChange}
                 placeholder="Ingrese el apellido"
+                required
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="username">
+                Nombre de usuario <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                id="username"
+                name="username"
+                value={patient.username}
+                onChange={handleInputChange}
+                placeholder="Ingrese el nombre de usuario"
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="password">
+                Contraseña <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                id="password"
+                name="password"
+                type="password"
+                value={patient.password}
+                onChange={handleInputChange}
+                placeholder="Ingrese la contraseña"
                 required
               />
             </div>
@@ -225,9 +261,10 @@ export default function NewPatientPage() {
             <h4 className="text-sm font-medium text-blue-900 mb-2">Información importante</h4>
             <ul className="text-sm text-blue-800 space-y-1">
               <li>• Todos los campos marcados con (*) son obligatorios</li>
+              <li>• El nombre de usuario debe ser único en el sistema</li>
+              <li>• La contraseña debe tener al menos 6 caracteres</li>
               <li>• El email debe tener un formato válido</li>
               <li>• El teléfono debe incluir el código de país</li>
-              <li>• La fecha de nacimiento debe ser anterior a la fecha actual</li>
             </ul>
           </div>
         </CardContent>

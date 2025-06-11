@@ -24,7 +24,14 @@ export const patientAuthUtils = {
   getPatient: (): PatientUser | null => {
     if (typeof window === "undefined") return null
     const patientData = localStorage.getItem(config.PATIENT_USER_KEY)
-    return patientData ? JSON.parse(patientData) : null
+    if (!patientData) return null
+
+    try {
+      return JSON.parse(patientData)
+    } catch (error) {
+      console.error("Error parsing patient data:", error)
+      return null
+    }
   },
 
   // Guardar los datos del paciente
@@ -38,7 +45,10 @@ export const patientAuthUtils = {
     if (typeof window === "undefined") return false
     const token = patientAuthUtils.getPatientToken()
     const patient = patientAuthUtils.getPatient()
-    return !!(token && patient)
+
+    console.log("Checking patient authentication:", { token: !!token, patient: !!patient })
+
+    return !!(token && patient && patient.id)
   },
 
   // Limpiar la autenticación del paciente

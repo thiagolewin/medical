@@ -26,35 +26,63 @@ export default function PatientLoginPage() {
     setError("")
     setIsLoading(true)
 
+    console.log("=== INICIO HANDLE SUBMIT ===")
+    console.log("Username:", username)
+    console.log("Password:", password ? "[PRESENTE]" : "[VACÍO]")
+
     try {
-      console.log("Intentando login de paciente con:", { username, password })
+      console.log("Llamando a patientAuthApi.login...")
 
       const response = await patientAuthApi.login({
         username,
         password,
       })
 
-      console.log("Respuesta de login de paciente exitosa:", response)
+      console.log("Login exitoso, respuesta recibida:", response)
 
-      // La respuesta tiene la estructura: { user: {...}, token: "..." }
+      // Guardar datos del paciente
       const patientData = {
         id: response.user.id,
         username: response.user.username,
         email: response.user.email,
-        token: response.token,
       }
 
-      // Guardar los datos del paciente y token
+      console.log("Guardando datos del paciente:", patientData)
+      console.log("Guardando token:", response.token ? "[PRESENTE]" : "[AUSENTE]")
+
       patientAuthUtils.setPatient(patientData)
       patientAuthUtils.setPatientToken(response.token)
 
-      // Redirigir al dashboard del paciente
-      router.push("/patient/dashboard")
+      // Verificar que se guardó correctamente
+      const savedPatient = patientAuthUtils.getPatient()
+      const savedToken = patientAuthUtils.getPatientToken()
+
+      console.log("Verificación - Paciente guardado:", savedPatient)
+      console.log("Verificación - Token guardado:", savedToken ? "[PRESENTE]" : "[AUSENTE]")
+
+      console.log("Redirigiendo a dashboard...")
+      router.push("/patient/forms")
     } catch (err: any) {
-      console.error("Error en login de paciente:", err)
-      setError(err.message || "Error al iniciar sesión. Por favor, verifique sus credenciales.")
+      console.log("=== ERROR EN HANDLE SUBMIT ===")
+      console.error("Error completo:", err)
+      console.error("Error name:", err.name)
+      console.error("Error message:", err.message)
+      console.error("Error stack:", err.stack)
+
+      // Mostrar error más específico
+      let errorMessage = "Error desconocido al iniciar sesión"
+
+      if (err.message) {
+        errorMessage = err.message
+      } else if (err.toString) {
+        errorMessage = err.toString()
+      }
+
+      console.log("Mostrando error al usuario:", errorMessage)
+      setError(errorMessage)
     } finally {
       setIsLoading(false)
+      console.log("=== FIN HANDLE SUBMIT ===")
     }
   }
 
