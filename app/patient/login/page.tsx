@@ -15,7 +15,7 @@ import { patientAuthApi } from "@/lib/patient-api"
 import { patientAuthUtils } from "@/lib/patient-auth"
 
 export default function PatientLoginPage() {
-  const [email, setEmail] = useState("")
+  const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState("")
   const [isLoading, setIsLoading] = useState(false)
@@ -27,23 +27,20 @@ export default function PatientLoginPage() {
     setIsLoading(true)
 
     try {
-      console.log("Intentando login de paciente con:", { email, password })
+      console.log("Intentando login de paciente con:", { username, password })
 
       const response = await patientAuthApi.login({
-        email,
+        username,
         password,
       })
 
       console.log("Respuesta de login de paciente exitosa:", response)
 
-      // La respuesta exitosa tiene la estructura del paciente
+      // La respuesta tiene la estructura: { user: {...}, token: "..." }
       const patientData = {
-        id: response.id,
-        email: response.email,
-        first_name: response.first_name,
-        last_name: response.last_name,
-        date_of_birth: response.date_of_birth,
-        phone: response.phone,
+        id: response.user.id,
+        username: response.user.username,
+        email: response.user.email,
         token: response.token,
       }
 
@@ -62,11 +59,11 @@ export default function PatientLoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center px-4 py-12">
+    <div className="min-h-screen bg-white flex items-center justify-center px-4 py-12">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <div className="flex justify-center mb-4">
-            <div className="bg-blue-600 p-3 rounded-full">
+            <div className="bg-red-600 p-3 rounded-full">
               <Heart className="h-8 w-8 text-white" />
             </div>
           </div>
@@ -78,7 +75,7 @@ export default function PatientLoginPage() {
           <CardHeader className="space-y-1">
             <CardTitle className="text-2xl font-bold text-center">Iniciar sesión</CardTitle>
             <CardDescription className="text-center">
-              Ingrese su email y contraseña para acceder a su portal
+              Ingrese su usuario y contraseña para acceder a su portal
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -90,13 +87,13 @@ export default function PatientLoginPage() {
             )}
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="email">Correo electrónico</Label>
+                <Label htmlFor="username">Usuario</Label>
                 <Input
-                  id="email"
-                  type="email"
-                  placeholder="su-email@ejemplo.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  id="username"
+                  type="text"
+                  placeholder="Ingrese su usuario"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
                   required
                   disabled={isLoading}
                 />
@@ -104,7 +101,7 @@ export default function PatientLoginPage() {
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <Label htmlFor="password">Contraseña</Label>
-                  <Link href="/patient/forgot-password" className="text-sm text-blue-600 hover:underline">
+                  <Link href="/patient/forgot-password" className="text-sm text-red-600 hover:underline">
                     ¿Olvidó su contraseña?
                   </Link>
                 </div>
@@ -118,7 +115,7 @@ export default function PatientLoginPage() {
                   disabled={isLoading}
                 />
               </div>
-              <Button type="submit" className="w-full" disabled={isLoading}>
+              <Button type="submit" className="w-full bg-red-600 hover:bg-red-700" disabled={isLoading}>
                 {isLoading ? "Iniciando sesión..." : "Iniciar sesión"}
               </Button>
             </form>
@@ -127,7 +124,7 @@ export default function PatientLoginPage() {
             <div className="text-center">
               <p className="text-sm text-gray-600">
                 ¿Necesita ayuda?{" "}
-                <Link href="/patient/support" className="text-blue-600 hover:underline">
+                <Link href="/patient/support" className="text-red-600 hover:underline">
                   Contacte con soporte
                 </Link>
               </p>

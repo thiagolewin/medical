@@ -2,62 +2,64 @@ import { config } from "./config"
 
 export interface PatientUser {
   id: number
+  username: string
   email: string
-  first_name: string
-  last_name: string
-  date_of_birth: string
-  phone: string
   token?: string
 }
 
 export const patientAuthUtils = {
-  // Obtener paciente del localStorage
-  getPatient: (): PatientUser | null => {
-    if (typeof window === "undefined") return null
-
-    const patientStr = localStorage.getItem(config.PATIENT_USER_KEY)
-    if (!patientStr) return null
-
-    try {
-      return JSON.parse(patientStr)
-    } catch {
-      return null
-    }
-  },
-
-  // Guardar paciente en localStorage
-  setPatient: (patient: PatientUser) => {
-    if (typeof window === "undefined") return
-    localStorage.setItem(config.PATIENT_USER_KEY, JSON.stringify(patient))
-  },
-
-  // Obtener token del paciente
+  // Obtener el token del paciente
   getPatientToken: (): string | null => {
     if (typeof window === "undefined") return null
-
-    // Primero intentar obtener del paciente
-    const patient = patientAuthUtils.getPatient()
-    if (patient?.token) return patient.token
-
-    // Si no, obtener del localStorage separado
     return localStorage.getItem(config.PATIENT_TOKEN_KEY)
   },
 
-  // Guardar token del paciente
-  setPatientToken: (token: string) => {
+  // Guardar el token del paciente
+  setPatientToken: (token: string): void => {
     if (typeof window === "undefined") return
     localStorage.setItem(config.PATIENT_TOKEN_KEY, token)
   },
 
-  // Limpiar datos de autenticación del paciente
-  clearPatientAuth: () => {
+  // Obtener los datos del paciente
+  getPatient: (): PatientUser | null => {
+    if (typeof window === "undefined") return null
+    const patientData = localStorage.getItem(config.PATIENT_USER_KEY)
+    return patientData ? JSON.parse(patientData) : null
+  },
+
+  // Guardar los datos del paciente
+  setPatient: (patient: PatientUser): void => {
     if (typeof window === "undefined") return
-    localStorage.removeItem(config.PATIENT_USER_KEY)
-    localStorage.removeItem(config.PATIENT_TOKEN_KEY)
+    localStorage.setItem(config.PATIENT_USER_KEY, JSON.stringify(patient))
   },
 
   // Verificar si el paciente está autenticado
   isPatientAuthenticated: (): boolean => {
-    return !!patientAuthUtils.getPatient() && !!patientAuthUtils.getPatientToken()
+    if (typeof window === "undefined") return false
+    const token = patientAuthUtils.getPatientToken()
+    const patient = patientAuthUtils.getPatient()
+    return !!(token && patient)
+  },
+
+  // Limpiar la autenticación del paciente
+  clearPatientAuth: (): void => {
+    if (typeof window === "undefined") return
+    localStorage.removeItem(config.PATIENT_TOKEN_KEY)
+    localStorage.removeItem(config.PATIENT_USER_KEY)
+  },
+
+  // Obtener headers de autenticación para requests
+  getPatientAuthHeaders: () => {
+    const token = patientAuthUtils.getPatientToken()
+    return token
+      ? {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+          "ngrok-skip-browser-warning": "true",
+        }
+      : {
+          "Content-Type": "application/json",
+          "ngrok-skip-browser-warning": "true",
+        }
   },
 }

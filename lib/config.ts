@@ -1,7 +1,7 @@
 // Configuración global de la aplicación
 export const config = {
   // URL base de la API - cambiar aquí cuando cambie el ngrok
-  API_BASE_URL: "https://ee6e-181-110-100-252.ngrok-free.app/api",
+  API_BASE_URL: "https://23a8-181-110-100-252.ngrok-free.app/api",
 
   // Configuración de la aplicación
   APP_NAME: "MediTrack",

@@ -1,161 +1,125 @@
 import { config } from "./config"
-import { patientAuthUtils } from "./patient-auth"
 
-// Configuración de la API para pacientes
-const API_BASE_URL = config.API_BASE_URL
+// Tipos para la API de pacientes
+export interface PatientLoginRequest {
+  username: string
+  password: string
+}
 
-// Headers comunes para todas las peticiones de pacientes
-const getPatientHeaders = () => {
-  const headers: Record<string, string> = {
+export interface PatientLoginResponse {
+  user: {
+    id: number
+    username: string
+    email: string
+  }
+  token: string
+}
+
+export interface PatientProtocol {
+  id: number
+  name: string
+  description: string
+  status: string
+  created_at: string
+  updated_at: string
+}
+
+export interface PatientForm {
+  id: number
+  title: string
+  description: string
+  protocol_id: number
+  status: string
+  created_at: string
+  updated_at: string
+}
+
+// Función helper para hacer requests con autenticación
+const makePatientRequest = async (endpoint: string, options: RequestInit = {}) => {
+  const token = localStorage.getItem(config.PATIENT_TOKEN_KEY)
+
+  const headers = {
     "Content-Type": "application/json",
     "ngrok-skip-browser-warning": "true",
+    ...(token && { Authorization: `Bearer ${token}` }),
+    ...options.headers,
   }
 
-  // Agregar token de autenticación del paciente si existe
-  const token = patientAuthUtils.getPatientToken()
-  if (token) {
-    headers["Authorization"] = `Bearer ${token}`
-  }
+  const response = await fetch(`${config.API_BASE_URL}${endpoint}`, {
+    ...options,
+    headers,
+  })
 
-  return headers
-}
-
-// Funciones para manejar errores de la API
-const handleResponse = async (response: Response) => {
   if (!response.ok) {
-    try {
-      const errorData = await response.json()
-      throw new Error(errorData.message || `Error ${response.status}: ${response.statusText}`)
-    } catch (e) {
-      throw new Error(`Error ${response.status}: ${response.statusText}`)
-    }
+    const errorData = await response.json().catch(() => ({}))
+    throw new Error(errorData.message || `Error ${response.status}: ${response.statusText}`)
   }
 
-  const contentLength = response.headers.get("content-length")
-  if (contentLength === "0") {
-    return null
-  }
-
-  const contentType = response.headers.get("content-type")
-  if (contentType && contentType.includes("application/json")) {
-    return response.json()
-  }
-
-  return response.text()
+  return response.json()
 }
 
-// API para autenticación de pacientes
+// API de autenticación de pacientes
 export const patientAuthApi = {
-  login: async (credentials: { email: string; password: string }) => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/patients/login`, {
-        method: "POST",
-        headers: getPatientHeaders(),
-        body: JSON.stringify(credentials),
-      })
-      return handleResponse(response)
-    } catch (error) {
-      console.error("Error en login de paciente:", error)
-      throw error
+  login: async (credentials: PatientLoginRequest): Promise<PatientLoginResponse> => {
+    console.log("Enviando request de login de paciente:", credentials)
+
+    const response = await fetch(`${config.API_BASE_URL}/patients/login`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "ngrok-skip-browser-warning": "true",
+      },
+      body: JSON.stringify(credentials),
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      console.error("Error en login de paciente:", errorData)
+      throw new Error(errorData.message || "Error al iniciar sesión")
     }
+
+    const data = await response.json()
+    console.log("Respuesta exitosa de login de paciente:", data)
+    return data
   },
 
   getProfile: async () => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/patients/profile`, {
-        method: "GET",
-        headers: getPatientHeaders(),
-      })
-      return handleResponse(response)
-    } catch (error) {
-      console.error("Error obteniendo perfil del paciente:", error)
-      throw error
-    }
+    return makePatientRequest("/patients/profile")
   },
 
   updateProfile: async (profileData: any) => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/patients/profile`, {
-        method: "PUT",
-        headers: getPatientHeaders(),
-        body: JSON.stringify(profileData),
-      })
-      return handleResponse(response)
-    } catch (error) {
-      console.error("Error actualizando perfil del paciente:", error)
-      throw error
-    }
+    return makePatientRequest("/patients/profile", {
+      method: "PUT",
+      body: JSON.stringify(profileData),
+    })
   },
 }
 
-// API para protocolos del paciente
+// API de protocolos para pacientes
 export const patientProtocolApi = {
-  getMyProtocols: async () => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/patients/protocols`, {
-        method: "GET",
-        headers: getPatientHeaders(),
-      })
-      return handleResponse(response)
-    } catch (error) {
-      console.error("Error obteniendo protocolos del paciente:", error)
-      throw error
-    }
+  getMyProtocols: async (): Promise<PatientProtocol[]> => {
+    return makePatientRequest("/patients/protocols")
   },
 
-  getProtocolForms: async (protocolId: number) => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/patients/protocols/${protocolId}/forms`, {
-        method: "GET",
-        headers: getPatientHeaders(),
-      })
-      return handleResponse(response)
-    } catch (error) {
-      console.error("Error obteniendo formularios del protocolo:", error)
-      throw error
-    }
+  getProtocolById: async (id: number): Promise<PatientProtocol> => {
+    return makePatientRequest(`/patients/protocols/${id}`)
   },
 }
 
-// API para formularios del paciente
+// API de formularios para pacientes
 export const patientFormApi = {
-  getForm: async (formId: number) => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/patients/forms/${formId}`, {
-        method: "GET",
-        headers: getPatientHeaders(),
-      })
-      return handleResponse(response)
-    } catch (error) {
-      console.error("Error obteniendo formulario:", error)
-      throw error
-    }
+  getMyForms: async (): Promise<PatientForm[]> => {
+    return makePatientRequest("/patients/forms")
   },
 
-  submitForm: async (formId: number, responses: any) => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/patients/forms/${formId}/submit`, {
-        method: "POST",
-        headers: getPatientHeaders(),
-        body: JSON.stringify({ responses }),
-      })
-      return handleResponse(response)
-    } catch (error) {
-      console.error("Error enviando formulario:", error)
-      throw error
-    }
+  getFormById: async (id: number): Promise<PatientForm> => {
+    return makePatientRequest(`/patients/forms/${id}`)
   },
 
-  getMySubmissions: async () => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/patients/submissions`, {
-        method: "GET",
-        headers: getPatientHeaders(),
-      })
-      return handleResponse(response)
-    } catch (error) {
-      console.error("Error obteniendo envíos del paciente:", error)
-      throw error
-    }
+  submitForm: async (formId: number, formData: any) => {
+    return makePatientRequest(`/patients/forms/${formId}/submit`, {
+      method: "POST",
+      body: JSON.stringify(formData),
+    })
   },
 }

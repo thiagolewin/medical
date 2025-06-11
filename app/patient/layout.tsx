@@ -17,6 +17,7 @@ interface PatientLayoutProps {
 
 export default function PatientLayout({ children }: PatientLayoutProps) {
   const [isMounted, setIsMounted] = useState(false)
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
   const router = useRouter()
   const pathname = usePathname()
 
@@ -24,18 +25,27 @@ export default function PatientLayout({ children }: PatientLayoutProps) {
     setIsMounted(true)
 
     // Verificar autenticación del paciente
-    if (!patientAuthUtils.isPatientAuthenticated()) {
+    const authenticated = patientAuthUtils.isPatientAuthenticated()
+    setIsAuthenticated(authenticated)
+
+    if (!authenticated && pathname !== "/patient/login") {
       router.push("/patient/login")
     }
-  }, [router])
+  }, [router, pathname])
 
   const handleLogout = () => {
     patientAuthUtils.clearPatientAuth()
     router.push("/patient/login")
   }
 
-  if (!isMounted) {
-    return null // Evitar renderizado en el servidor
+  // Si no está montado o no está autenticado, no mostrar el layout
+  if (!isMounted || !isAuthenticated) {
+    return null
+  }
+
+  // Si estamos en la página de login, no mostrar el layout
+  if (pathname === "/patient/login") {
+    return <>{children}</>
   }
 
   const navigation = [
@@ -52,7 +62,7 @@ export default function PatientLayout({ children }: PatientLayoutProps) {
         <div className="flex flex-col flex-grow border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 overflow-y-auto">
           <div className="flex items-center h-16 flex-shrink-0 px-4 border-b border-gray-200 dark:border-gray-800">
             <Link href="/patient/dashboard" className="flex items-center">
-              <div className="bg-blue-600 p-2 rounded-lg mr-3">
+              <div className="bg-red-600 p-2 rounded-lg mr-3">
                 <Heart className="h-6 w-6 text-white" />
               </div>
               <span className="text-xl font-bold">Portal Paciente</span>
@@ -69,14 +79,14 @@ export default function PatientLayout({ children }: PatientLayoutProps) {
                     className={cn(
                       "group flex items-center px-2 py-2 text-sm font-medium rounded-md",
                       isActive
-                        ? "bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-300"
+                        ? "bg-red-100 dark:bg-red-900 text-red-600 dark:text-red-300"
                         : "text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800",
                     )}
                   >
                     <item.icon
                       className={cn(
                         "mr-3 flex-shrink-0 h-5 w-5",
-                        isActive ? "text-blue-600 dark:text-blue-300" : "text-gray-400 dark:text-gray-500",
+                        isActive ? "text-red-600 dark:text-red-300" : "text-gray-400 dark:text-gray-500",
                       )}
                     />
                     {item.name}
@@ -105,7 +115,7 @@ export default function PatientLayout({ children }: PatientLayoutProps) {
         <SheetContent side="left" className="w-64 p-0">
           <div className="flex flex-col h-full">
             <div className="flex items-center h-16 flex-shrink-0 px-4 border-b">
-              <div className="bg-blue-600 p-2 rounded-lg mr-3">
+              <div className="bg-red-600 p-2 rounded-lg mr-3">
                 <Heart className="h-6 w-6 text-white" />
               </div>
               <span className="text-xl font-bold">Portal Paciente</span>
@@ -121,14 +131,14 @@ export default function PatientLayout({ children }: PatientLayoutProps) {
                       className={cn(
                         "group flex items-center px-2 py-2 text-sm font-medium rounded-md",
                         isActive
-                          ? "bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-300"
+                          ? "bg-red-100 dark:bg-red-900 text-red-600 dark:text-red-300"
                           : "text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800",
                       )}
                     >
                       <item.icon
                         className={cn(
                           "mr-3 flex-shrink-0 h-5 w-5",
-                          isActive ? "text-blue-600 dark:text-blue-300" : "text-gray-400 dark:text-gray-500",
+                          isActive ? "text-red-600 dark:text-red-300" : "text-gray-400 dark:text-gray-500",
                         )}
                       />
                       {item.name}
