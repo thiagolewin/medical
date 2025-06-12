@@ -26,15 +26,19 @@ export default function LoginPage() {
     setError("")
     setIsLoading(true)
 
+    console.log("=== INICIO LOGIN ADMIN ===")
+    console.log("Username:", username)
+    console.log("Password:", password ? "[PRESENTE]" : "[VACÍO]")
+
     try {
-      console.log("Intentando login con:", { username, password })
+      console.log("Llamando a usersApi.login...")
 
       const response = await usersApi.login({
         username,
         password,
       })
 
-      console.log("Respuesta de login exitosa:", response)
+      console.log("Login exitoso, respuesta recibida:", response)
 
       // La respuesta exitosa tiene la estructura:
       // { id, username, email, role, token }
@@ -47,17 +51,44 @@ export default function LoginPage() {
         token: response.token,
       }
 
+      console.log("Guardando datos del usuario:", userData)
+      console.log("Guardando token:", response.token ? "[PRESENTE]" : "[AUSENTE]")
+
       // Guardar los datos del usuario y token
       authUtils.setUser(userData)
       authUtils.setToken(response.token)
 
-      // Redirigir al dashboard
-      router.push("/admin/dashboard")
+      // Verificar que se guardó correctamente
+      const savedUser = authUtils.getUser()
+      const savedToken = authUtils.getToken()
+
+      console.log("Verificación - Usuario guardado:", savedUser)
+      console.log("Verificación - Token guardado:", savedToken ? "[PRESENTE]" : "[AUSENTE]")
+
+      console.log("Redirigiendo a dashboard...")
+
+      // Usar replace en lugar de push para evitar volver atrás
+      router.replace("/admin/dashboard")
     } catch (err: any) {
-      console.error("Error en login:", err)
-      setError(err.message || "Error al iniciar sesión. Por favor, inténtelo de nuevo.")
+      console.log("=== ERROR EN LOGIN ADMIN ===")
+      console.error("Error completo:", err)
+      console.error("Error name:", err.name)
+      console.error("Error message:", err.message)
+      console.error("Error stack:", err.stack)
+
+      let errorMessage = "Error al iniciar sesión. Por favor, inténtelo de nuevo."
+
+      if (err.message) {
+        errorMessage = err.message
+      } else if (err.toString) {
+        errorMessage = err.toString()
+      }
+
+      console.log("Mostrando error al usuario:", errorMessage)
+      setError(errorMessage)
     } finally {
       setIsLoading(false)
+      console.log("=== FIN LOGIN ADMIN ===")
     }
   }
 
