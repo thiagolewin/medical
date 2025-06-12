@@ -5,7 +5,7 @@ import type React from "react"
 import { useState, useEffect } from "react"
 import { useRouter, usePathname } from "next/navigation"
 import Link from "next/link"
-import { LayoutDashboard, FileText, ClipboardList, Users, Bell, Settings, LogOut, Menu } from "lucide-react"
+import { LayoutDashboard, FileText, ClipboardList, Users, LogOut, Menu } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { cn } from "@/lib/utils"
@@ -43,8 +43,6 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     { name: "Formularios", href: "/admin/forms", icon: FileText },
     { name: "Protocolos", href: "/admin/protocols", icon: ClipboardList },
     { name: "Pacientes", href: "/admin/patients", icon: Users },
-    { name: "Alertas", href: "/admin/alerts", icon: Bell },
-    { name: "Configuración", href: "/admin/settings", icon: Settings },
   ]
 
   return (
