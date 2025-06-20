@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -11,8 +11,8 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AlertCircle } from "lucide-react"
-import { usersApi } from "@/lib/api"
 import { authUtils } from "@/lib/auth"
+import { config } from "@/lib/config"
 
 export default function LoginPage() {
   const [username, setUsername] = useState("")
@@ -20,6 +20,12 @@ export default function LoginPage() {
   const [error, setError] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
+
+  // Limpiar localStorage al cargar la página
+  useEffect(() => {
+    console.log("Limpiando localStorage al cargar página de login...")
+    authUtils.clearAuth()
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -29,63 +35,110 @@ export default function LoginPage() {
     console.log("=== INICIO LOGIN ADMIN ===")
     console.log("Username:", username)
     console.log("Password:", password ? "[PRESENTE]" : "[VACÍO]")
+    console.log("API Base URL:", config.API_BASE_URL)
 
     try {
-      console.log("Llamando a usersApi.login...")
+      // Limpiar datos previos antes de empezar
+      console.log("Limpiando datos previos...")
+      authUtils.clearAuth()
 
-      const response = await usersApi.login({
-        username,
-        password,
+      console.log("Llamando a API de login admin...")
+
+      const response = await fetch(`${config.API_BASE_URL}/users/login`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "ngrok-skip-browser-warning": "true",
+        },
+        body: JSON.stringify({
+          username,
+          password,
+        }),
       })
 
-      console.log("Login exitoso, respuesta recibida:", response)
+      console.log("Response status:", response.status)
 
-      // La respuesta exitosa tiene la estructura:
-      // { id, username, email, role, token }
-      const userData = {
-        id: response.id,
-        username: response.username,
-        email: response.email,
-        role: response.role,
-        name: response.username,
-        token: response.token,
+      if (!response.ok) {
+        let errorMessage = `Error ${response.status}: ${response.statusText}`
+        try {
+          const errorData = await response.json()
+          console.log("Error data:", errorData)
+          errorMessage = errorData.message || errorMessage
+        } catch (e) {
+          console.log("No se pudo parsear error como JSON")
+        }
+        throw new Error(errorMessage)
       }
 
-      console.log("Guardando datos del usuario:", userData)
-      console.log("Guardando token:", response.token ? "[PRESENTE]" : "[AUSENTE]")
+      const responseData = await response.json()
+      console.log("Login exitoso, respuesta recibida:", responseData)
 
-      // Guardar los datos del usuario y token
+      // Verificar estructura de respuesta
+      if (!responseData.id || !responseData.username || !responseData.token) {
+        console.error("Respuesta incompleta del servidor:", responseData)
+        throw new Error("Respuesta del servidor incompleta")
+      }
+
+      // Preparar datos del usuario SIN el token
+      const userData = {
+        id: responseData.id,
+        username: responseData.username,
+        email: responseData.email,
+        role: responseData.role,
+        name: responseData.username,
+      }
+
+      console.log("Datos del usuario preparados (sin token):", userData)
+      console.log("Token separado:", responseData.token ? "[PRESENTE]" : "[AUSENTE]")
+
+      // Guardar token PRIMERO
+      console.log("Guardando token...")
+      authUtils.setToken(responseData.token)
+
+      // Luego guardar datos del usuario
+      console.log("Guardando datos del usuario...")
       authUtils.setUser(userData)
-      authUtils.setToken(response.token)
 
       // Verificar que se guardó correctamente
+      console.log("Verificando datos guardados...")
       const savedUser = authUtils.getUser()
       const savedToken = authUtils.getToken()
+      const isAuth = authUtils.isAuthenticated()
 
       console.log("Verificación - Usuario guardado:", savedUser)
       console.log("Verificación - Token guardado:", savedToken ? "[PRESENTE]" : "[AUSENTE]")
+      console.log("Verificación - isAuthenticated:", isAuth)
 
-      console.log("Redirigiendo a dashboard...")
+      if (!isAuth) {
+        console.error("Error: isAuthenticated devolvió false después de guardar")
+        console.error("Contenido completo de localStorage:")
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i)
+          const value = localStorage.getItem(key!)
+          console.error(`- ${key}: ${value}`)
+        }
+        throw new Error("Error guardando datos de autenticación")
+      }
+
+      console.log("Autenticación exitosa, redirigiendo a dashboard...")
 
       // Usar replace en lugar de push para evitar volver atrás
       router.replace("/admin/dashboard")
     } catch (err: any) {
       console.log("=== ERROR EN LOGIN ADMIN ===")
       console.error("Error completo:", err)
-      console.error("Error name:", err.name)
-      console.error("Error message:", err.message)
-      console.error("Error stack:", err.stack)
 
       let errorMessage = "Error al iniciar sesión. Por favor, inténtelo de nuevo."
 
       if (err.message) {
         errorMessage = err.message
-      } else if (err.toString) {
-        errorMessage = err.toString()
       }
 
       console.log("Mostrando error al usuario:", errorMessage)
       setError(errorMessage)
+
+      // Limpiar datos en caso de error
+      authUtils.clearAuth()
     } finally {
       setIsLoading(false)
       console.log("=== FIN LOGIN ADMIN ===")
@@ -120,12 +173,7 @@ export default function LoginPage() {
               />
             </div>
             <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="password">Contraseña</Label>
-                <Link href="/forgot-password" className="text-sm text-primary hover:underline">
-                  ¿Olvidó su contraseña?
-                </Link>
-              </div>
+              <Label htmlFor="password">Contraseña</Label>
               <Input
                 id="password"
                 type="password"
@@ -141,8 +189,13 @@ export default function LoginPage() {
             </Button>
           </form>
         </CardContent>
-        <CardFooter className="flex justify-center">
+        <CardFooter className="flex flex-col items-center space-y-2">
           <p className="text-sm text-muted-foreground">Ingrese sus credenciales para acceder al sistema médico</p>
+          <div className="text-center">
+            <Link href="/patient/login" className="text-sm text-primary hover:underline">
+              ¿Es usted paciente? Acceda aquí
+            </Link>
+          </div>
         </CardFooter>
       </Card>
     </div>

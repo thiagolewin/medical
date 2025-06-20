@@ -8,15 +8,17 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { ArrowLeft, Save } from "lucide-react"
+import { ArrowLeft, Save, Loader2 } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import Link from "next/link"
-import { patientsApi, nationalitiesApi } from "@/lib/api"
+import { nationalitiesApi } from "@/lib/api"
+import { config } from "@/lib/config"
 
 export default function NewPatientPage() {
   const router = useRouter()
   const [nationalities, setNationalities] = useState([])
   const [isLoadingNationalities, setIsLoadingNationalities] = useState(true)
+  const [isSaving, setIsSaving] = useState(false)
   const [patient, setPatient] = useState({
     firstName: "",
     lastName: "",
@@ -41,6 +43,7 @@ export default function NewPatientPage() {
         }
       } catch (error) {
         console.error("Error cargando nacionalidades:", error)
+        alert("Error al cargar las nacionalidades")
       } finally {
         setIsLoadingNationalities(false)
       }
@@ -81,6 +84,8 @@ export default function NewPatientPage() {
       return
     }
 
+    setIsSaving(true)
+
     try {
       const patientData = {
         first_name: patient.firstName,
@@ -94,14 +99,32 @@ export default function NewPatientPage() {
       }
 
       console.log("Creando paciente:", patientData)
-      const response = await patientsApi.createPatient(patientData)
-      console.log("Paciente creado:", response)
 
+      const response = await fetch(`${config.API_BASE_URL}/patients`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "ngrok-skip-browser-warning": "true",
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+        body: JSON.stringify(patientData),
+      })
+
+      if (!response.ok) {
+        throw new Error("Error al crear el paciente")
+      }
+
+      const result = await response.json()
+      console.log("Paciente creado:", result)
+
+      alert("Paciente creado exitosamente")
       // Redirigir a la lista de pacientes
       router.push("/admin/patients")
     } catch (error) {
       console.error("Error creating patient:", error)
       alert("Error al crear el paciente. Por favor, inténtelo de nuevo.")
+    } finally {
+      setIsSaving(false)
     }
   }
 
@@ -119,9 +142,18 @@ export default function NewPatientPage() {
             <p className="text-muted-foreground">Registre un nuevo paciente en el sistema</p>
           </div>
         </div>
-        <Button onClick={savePatient}>
-          <Save className="mr-2 h-4 w-4" />
-          Guardar paciente
+        <Button onClick={savePatient} disabled={isSaving}>
+          {isSaving ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Guardando...
+            </>
+          ) : (
+            <>
+              <Save className="mr-2 h-4 w-4" />
+              Guardar paciente
+            </>
+          )}
         </Button>
       </div>
 
@@ -274,9 +306,18 @@ export default function NewPatientPage() {
         <Link href="/admin/patients">
           <Button variant="outline">Cancelar</Button>
         </Link>
-        <Button onClick={savePatient}>
-          <Save className="mr-2 h-4 w-4" />
-          Guardar paciente
+        <Button onClick={savePatient} disabled={isSaving}>
+          {isSaving ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Guardando...
+            </>
+          ) : (
+            <>
+              <Save className="mr-2 h-4 w-4" />
+              Guardar paciente
+            </>
+          )}
         </Button>
       </div>
     </div>

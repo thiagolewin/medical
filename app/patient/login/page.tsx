@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -21,6 +21,18 @@ export default function PatientLoginPage() {
   const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
 
+  // Verificar si ya está autenticado
+  useEffect(() => {
+    const checkExistingAuth = () => {
+      if (patientAuthUtils.isPatientAuthenticated()) {
+        console.log("Ya está autenticado, redirigiendo...")
+        router.push("/patient/forms")
+      }
+    }
+
+    checkExistingAuth()
+  }, [router])
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError("")
@@ -31,6 +43,10 @@ export default function PatientLoginPage() {
     console.log("Password:", password ? "[PRESENTE]" : "[VACÍO]")
 
     try {
+      // Limpiar datos previos antes de intentar login
+      console.log("Limpiando datos de autenticación previos...")
+      patientAuthUtils.clearPatientAuth()
+
       console.log("Llamando a patientAuthApi.login...")
 
       const response = await patientAuthApi.login({
@@ -40,34 +56,80 @@ export default function PatientLoginPage() {
 
       console.log("Login exitoso, respuesta recibida:", response)
 
-      // Guardar datos del paciente
+      // Verificar que la respuesta tenga la estructura esperada
+      if (!response || !response.user || !response.token) {
+        console.error("Respuesta inválida:", response)
+        throw new Error("Respuesta de login inválida: faltan datos del usuario o token")
+      }
+
+      if (!response.user.id || !response.user.username || !response.user.email) {
+        console.error("Datos de usuario incompletos:", response.user)
+        throw new Error("Datos de usuario incompletos")
+      }
+
+      // Preparar datos del paciente (SIN el token)
       const patientData = {
         id: response.user.id,
         username: response.user.username,
         email: response.user.email,
       }
 
-      console.log("Guardando datos del paciente:", patientData)
-      console.log("Guardando token:", response.token ? "[PRESENTE]" : "[AUSENTE]")
+      console.log("=== GUARDANDO DATOS ===")
+      console.log("Datos del paciente a guardar:", patientData)
+      console.log("Token a guardar (primeros 20 chars):", response.token.substring(0, 20) + "...")
 
-      patientAuthUtils.setPatient(patientData)
+      // Guardar token PRIMERO
       patientAuthUtils.setPatientToken(response.token)
 
+      // Esperar un momento para asegurar que se guarde
+      await new Promise((resolve) => setTimeout(resolve, 100))
+
+      // Luego guardar datos del paciente
+      patientAuthUtils.setPatient(patientData)
+
+      // Esperar un momento para asegurar que se guarde
+      await new Promise((resolve) => setTimeout(resolve, 100))
+
+      console.log("=== VERIFICACIÓN POST-GUARDADO ===")
       // Verificar que se guardó correctamente
       const savedPatient = patientAuthUtils.getPatient()
       const savedToken = patientAuthUtils.getPatientToken()
 
       console.log("Verificación - Paciente guardado:", savedPatient)
-      console.log("Verificación - Token guardado:", savedToken ? "[PRESENTE]" : "[AUSENTE]")
+      console.log("Verificación - Token guardado:", savedToken ? "[TOKEN PRESENTE]" : "[TOKEN AUSENTE]")
 
-      console.log("Redirigiendo a dashboard...")
-      router.push("/patient/forms")
+      if (!savedPatient) {
+        console.error("Error: No se pudieron guardar los datos del paciente")
+        throw new Error("Error guardando datos del paciente")
+      }
+
+      if (!savedToken) {
+        console.error("Error: No se pudo guardar el token")
+        throw new Error("Error guardando token de autenticación")
+      }
+
+      // Verificar autenticación final
+      const isAuth = patientAuthUtils.isPatientAuthenticated()
+      console.log("Verificación final de autenticación:", isAuth)
+
+      if (!isAuth) {
+        console.error("Error: La verificación de autenticación falló después del login")
+        throw new Error("Error en la verificación de autenticación")
+      }
+
+      console.log("Login completado exitosamente, redirigiendo...")
+
+      // Usar replace en lugar de push para evitar volver al login
+      router.replace("/patient/forms")
     } catch (err: any) {
       console.log("=== ERROR EN HANDLE SUBMIT ===")
       console.error("Error completo:", err)
       console.error("Error name:", err.name)
       console.error("Error message:", err.message)
       console.error("Error stack:", err.stack)
+
+      // Limpiar datos en caso de error
+      patientAuthUtils.clearPatientAuth()
 
       // Mostrar error más específico
       let errorMessage = "Error desconocido al iniciar sesión"
@@ -129,9 +191,6 @@ export default function PatientLoginPage() {
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <Label htmlFor="password">Contraseña</Label>
-                  <Link href="/patient/forgot-password" className="text-sm text-red-600 hover:underline">
-                    ¿Olvidó su contraseña?
-                  </Link>
                 </div>
                 <Input
                   id="password"
@@ -149,14 +208,7 @@ export default function PatientLoginPage() {
             </form>
           </CardContent>
           <CardFooter className="flex flex-col space-y-4">
-            <div className="text-center">
-              <p className="text-sm text-gray-600">
-                ¿Necesita ayuda?{" "}
-                <Link href="/patient/support" className="text-red-600 hover:underline">
-                  Contacte con soporte
-                </Link>
-              </p>
-            </div>
+            <div className="text-center"></div>
             <div className="text-center">
               <Link href="/login" className="text-sm text-gray-500 hover:underline">
                 ¿Es usted personal médico? Acceda aquí

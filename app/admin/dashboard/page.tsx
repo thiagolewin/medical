@@ -6,6 +6,7 @@ import { FileText, ClipboardList, Users, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { formsApi, protocolsApi, patientsApi } from "@/lib/api"
+import { useLanguage } from "@/lib/language-context"
 
 interface User {
   id: number
@@ -14,6 +15,7 @@ interface User {
 }
 
 export default function DashboardPage() {
+  const { language } = useLanguage()
   const [user, setUser] = useState<User | null>(null)
   const [stats, setStats] = useState({
     totalForms: 0,
@@ -100,7 +102,13 @@ export default function DashboardPage() {
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
         <p className="text-muted-foreground">
-          {user ? `Bienvenido, ${user.name}` : "Cargando información de usuario..."}
+          {user
+            ? language === "es"
+              ? `Bienvenido, ${user.name}`
+              : `Welcome, ${user.name}`
+            : language === "es"
+              ? "Cargando información de usuario..."
+              : "Loading user information..."}
         </p>
       </div>
 
@@ -109,7 +117,7 @@ export default function DashboardPage() {
           <CardContent className="p-6">
             <p className="text-red-600">{error}</p>
             <Button onClick={loadDashboardData} className="mt-2" variant="outline">
-              Reintentar
+              {language === "es" ? "Reintentar" : "Retry"}
             </Button>
           </CardContent>
         </Card>
@@ -118,15 +126,17 @@ export default function DashboardPage() {
       <div className="grid gap-6 md:grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Formularios</CardTitle>
+            <CardTitle className="text-sm font-medium">{language === "es" ? "Formularios" : "Forms"}</CardTitle>
             <FileText className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{isLoading ? "..." : stats.totalForms}</div>
-            <p className="text-xs text-muted-foreground">Formularios configurados</p>
+            <p className="text-xs text-muted-foreground">
+              {language === "es" ? "Formularios configurados" : "Configured forms"}
+            </p>
             <Link href="/admin/forms" className="mt-2 inline-block">
               <Button size="sm" variant="outline">
-                Ver todos
+                {language === "es" ? "Ver todos" : "View all"}
               </Button>
             </Link>
           </CardContent>
@@ -134,15 +144,17 @@ export default function DashboardPage() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Protocolos</CardTitle>
+            <CardTitle className="text-sm font-medium">{language === "es" ? "Protocolos" : "Protocols"}</CardTitle>
             <ClipboardList className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{isLoading ? "..." : stats.totalProtocols}</div>
-            <p className="text-xs text-muted-foreground">Protocolos activos</p>
+            <p className="text-xs text-muted-foreground">
+              {language === "es" ? "Protocolos activos" : "Active protocols"}
+            </p>
             <Link href="/admin/protocols" className="mt-2 inline-block">
               <Button size="sm" variant="outline">
-                Ver todos
+                {language === "es" ? "Ver todos" : "View all"}
               </Button>
             </Link>
           </CardContent>
@@ -150,15 +162,17 @@ export default function DashboardPage() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Pacientes</CardTitle>
+            <CardTitle className="text-sm font-medium">{language === "es" ? "Pacientes" : "Patients"}</CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{isLoading ? "..." : stats.totalPatients}</div>
-            <p className="text-xs text-muted-foreground">Pacientes registrados</p>
+            <p className="text-xs text-muted-foreground">
+              {language === "es" ? "Pacientes registrados" : "Registered patients"}
+            </p>
             <Link href="/admin/patients" className="mt-2 inline-block">
               <Button size="sm" variant="outline">
-                Ver todos
+                {language === "es" ? "Ver todos" : "View all"}
               </Button>
             </Link>
           </CardContent>
@@ -170,7 +184,7 @@ export default function DashboardPage() {
           <CardContent className="p-6">
             <div className="flex items-center justify-center">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-              <span className="ml-2">Cargando datos...</span>
+              <span className="ml-2">{language === "es" ? "Cargando datos..." : "Loading data..."}</span>
             </div>
           </CardContent>
         </Card>
@@ -181,28 +195,28 @@ export default function DashboardPage() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center justify-between">
-                Acciones rápidas
+                {language === "es" ? "Acciones rápidas" : "Quick actions"}
                 <Plus className="h-4 w-4" />
               </CardTitle>
-              <CardDescription>Crear nuevos elementos</CardDescription>
+              <CardDescription>{language === "es" ? "Crear nuevos elementos" : "Create new items"}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-2">
               <Link href="/admin/forms/new" className="block">
                 <Button className="w-full" variant="outline">
                   <FileText className="h-4 w-4 mr-2" />
-                  Nuevo Formulario
+                  {language === "es" ? "Nuevo Formulario" : "New Form"}
                 </Button>
               </Link>
               <Link href="/admin/protocols/new" className="block">
                 <Button className="w-full" variant="outline">
                   <ClipboardList className="h-4 w-4 mr-2" />
-                  Nuevo Protocolo
+                  {language === "es" ? "Nuevo Protocolo" : "New Protocol"}
                 </Button>
               </Link>
               <Link href="/admin/patients/new" className="block">
                 <Button className="w-full" variant="outline">
                   <Users className="h-4 w-4 mr-2" />
-                  Nuevo Paciente
+                  {language === "es" ? "Nuevo Paciente" : "New Patient"}
                 </Button>
               </Link>
             </CardContent>

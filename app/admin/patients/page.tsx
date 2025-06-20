@@ -16,7 +16,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Badge } from "@/components/ui/badge"
 import { patientsApi } from "@/lib/api"
 
 export default function PatientsPage() {
@@ -130,14 +129,13 @@ export default function PatientsPage() {
                     <TableHead>Nombre</TableHead>
                     <TableHead>Email</TableHead>
                     <TableHead>Fecha de nacimiento</TableHead>
-                    <TableHead>Protocolos</TableHead>
                     <TableHead className="text-right">Acciones</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredPatients.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={5} className="text-center">
+                      <TableCell colSpan={4} className="text-center">
                         No se encontraron pacientes
                       </TableCell>
                     </TableRow>
@@ -149,7 +147,6 @@ export default function PatientsPage() {
                         </TableCell>
                         <TableCell>{patient.email}</TableCell>
                         <TableCell>{new Date(patient.date_of_birth).toLocaleDateString()}</TableCell>
-                        <TableCell>{patient.protocolCount || 0}</TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">
                             <Link href={`/admin/patients/${patient.id}`}>
@@ -209,10 +206,6 @@ export default function PatientsPage() {
                       <div className="flex justify-between">
                         <span className="text-sm font-medium">Género:</span>
                         <span className="text-sm">{getGenderText(patient.gender)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-sm font-medium">Protocolos:</span>
-                        <Badge variant="outline">{patient.protocolCount || 0}</Badge>
                       </div>
                     </div>
                     <div className="mt-4 flex justify-between">

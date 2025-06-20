@@ -4,22 +4,19 @@ import type React from "react"
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { ArrowLeft, Plus, Save, Trash2, Edit } from "lucide-react"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Switch } from "@/components/ui/switch"
-import Link from "next/link"
 import { formsApi, questionTypesApi, questionsApi } from "@/lib/api"
+import { useLanguage } from "@/lib/language-context"
 
 interface QuestionType {
   id: number
   key_name: string
   name_es: string
   name_en: string
+}
+
+interface NumberRange {
+  min: number
+  max: number
 }
 
 interface Question {
@@ -31,6 +28,8 @@ interface Question {
   isRequired: boolean
   orderInForm: number
   options: Option[]
+  includeOtherOption?: boolean
+  numberRange?: NumberRange // Para almacenar temporalmente el rango numérico
 }
 
 interface Option {
@@ -43,7 +42,7 @@ interface Option {
 
 export default function NewFormPage() {
   const router = useRouter()
-  const [activeTab, setActiveTab] = useState("spanish")
+  const { language } = useLanguage()
   const [form, setForm] = useState({
     keyName: "",
     nameEs: "",
@@ -56,6 +55,11 @@ export default function NewFormPage() {
   const [isEditingQuestion, setIsEditingQuestion] = useState(false)
   const [questionTypes, setQuestionTypes] = useState<QuestionType[]>([])
   const [isLoadingTypes, setIsLoadingTypes] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+
+  // Estados para el diálogo de números
+  const [isNumberDialogOpen, setIsNumberDialogOpen] = useState(false)
+  const [numberRange, setNumberRange] = useState({ min: 1, max: 5 })
 
   // Función para manejar cambios en keyName - ahora permite _ pero no -
   const handleKeyNameChange = (e: React.ChangeEvent<HTMLInputElement>, field: string) => {
@@ -78,17 +82,38 @@ export default function NewFormPage() {
       try {
         setIsLoadingTypes(true)
         const types = await questionTypesApi.getQuestionTypes()
-        setQuestionTypes(types)
+
+        // Filtrar tipos numbers específicos y agregar opción genérica
+        const filteredTypes = types.filter((type) => !type.key_name.startsWith("numbers_"))
+
+        // Agregar opción genérica para números
+        const numbersOption = {
+          id: -1, // ID temporal para identificar la opción genérica
+          key_name: "numbers",
+          name_es: "Números (rango personalizado)",
+          name_en: "Numbers (custom range)",
+        }
+
+        setQuestionTypes([...filteredTypes, numbersOption])
       } catch (error) {
         console.error("Error cargando tipos de pregunta:", error)
-        // Fallback a tipos estáticos si falla la API
+        // Fallback a tipos estáticos
         setQuestionTypes([
           { id: 1, key_name: "text", name_es: "Texto", name_en: "Text" },
-          { id: 2, key_name: "number", name_es: "Numérico", name_en: "Number" },
-          { id: 3, key_name: "single_choice", name_es: "Selección única", name_en: "Single choice" },
-          { id: 4, key_name: "multiple_choice", name_es: "Selección múltiple", name_en: "Multiple choice" },
-          { id: 5, key_name: "date", name_es: "Fecha", name_en: "Date" },
-          { id: 6, key_name: "scale", name_es: "Escala", name_en: "Scale" },
+          { id: 2, key_name: "optionandtext", name_es: "Opciones + texto", name_en: "Options + text" },
+          {
+            id: 6,
+            key_name: "optionmultipleandtext",
+            name_es: "Opciones múltiples + texto",
+            name_en: "Multiple Options + text",
+          },
+          {
+            id: 4,
+            key_name: "optiondropdownandtext",
+            name_es: "Opciones multiples DropDown + texto",
+            name_en: "Options DropDown + text",
+          },
+          { id: -1, key_name: "numbers", name_es: "Números (rango personalizado)", name_en: "Numbers (custom range)" },
         ])
       } finally {
         setIsLoadingTypes(false)
@@ -113,6 +138,7 @@ export default function NewFormPage() {
       isRequired: false,
       orderInForm: questions.length + 1,
       options: [],
+      includeOtherOption: false,
     }
     setCurrentQuestion(newQuestion)
     setIsEditingQuestion(true)
@@ -123,12 +149,50 @@ export default function NewFormPage() {
     setIsEditingQuestion(true)
   }
 
+  const handleQuestionTypeChange = async (value: string) => {
+    const typeId = Number.parseInt(value)
+
+    if (typeId === -1) {
+      // Es la opción genérica de números, abrir diálogo
+      setIsNumberDialogOpen(true)
+    } else {
+      handleQuestionChange("questionTypeId", typeId)
+      // Si cambiamos a un tipo que no es numérico, eliminamos el rango
+      if (currentQuestion?.numberRange) {
+        setCurrentQuestion({
+          ...currentQuestion,
+          questionTypeId: typeId,
+          numberRange: undefined,
+        })
+      } else {
+        handleQuestionChange("questionTypeId", typeId)
+      }
+    }
+  }
+
+  const confirmNumberRange = () => {
+    if (!currentQuestion) return
+
+    // Guardar el rango en la pregunta actual, pero mantener el tipo como -1 (temporal)
+    setCurrentQuestion({
+      ...currentQuestion,
+      questionTypeId: -1, // Mantenemos el ID temporal
+      numberRange: { ...numberRange }, // Guardamos el rango para usarlo después
+    })
+
+    setIsNumberDialogOpen(false)
+  }
+
   const saveQuestion = () => {
     if (!currentQuestion) return
 
     // Validar campos obligatorios
     if (!currentQuestion.textEs || !currentQuestion.textEn) {
-      alert("Por favor complete todos los campos obligatorios de la pregunta.")
+      alert(
+        language === "es"
+          ? "Por favor complete todos los campos obligatorios de la pregunta."
+          : "Please complete all required question fields.",
+      )
       return
     }
 
@@ -136,10 +200,26 @@ export default function NewFormPage() {
     const selectedType = questionTypes.find((t) => t.id === currentQuestion.questionTypeId)
     if (
       selectedType &&
-      (selectedType.key_name === "single_choice" || selectedType.key_name === "multiple_choice") &&
+      (selectedType.key_name === "optionandtext" ||
+        selectedType.key_name === "optionmultipleandtext" ||
+        selectedType.key_name === "optiondropdownandtext") &&
       currentQuestion.options.length === 0
     ) {
-      alert("Las preguntas de selección deben tener al menos una opción.")
+      alert(
+        language === "es"
+          ? "Las preguntas de selección deben tener al menos una opción."
+          : "Selection questions must have at least one option.",
+      )
+      return
+    }
+
+    // Si es una pregunta numérica temporal, validar que tenga rango
+    if (currentQuestion.questionTypeId === -1 && (!currentQuestion.numberRange || !currentQuestion.numberRange.min || !currentQuestion.numberRange.max)) {
+      alert(
+        language === "es"
+          ? "Por favor configure el rango numérico para esta pregunta."
+          : "Please configure the numeric range for this question.",
+      )
       return
     }
 
@@ -200,22 +280,109 @@ export default function NewFormPage() {
     setCurrentQuestion({ ...currentQuestion, [field]: value })
   }
 
-  // Modificar la función saveForm para validar la clave única
+  const handleDragEnd = (result: any) => {
+    if (!result.destination || !currentQuestion) return
+
+    const items = Array.from(currentQuestion.options)
+    const [reorderedItem] = items.splice(result.source.index, 1)
+    items.splice(result.destination.index, 0, reorderedItem)
+
+    // Actualizar el orden de las opciones
+    const updatedOptions = items.map((item, index) => ({
+      ...item,
+      orderInOption: index + 1,
+    }))
+
+    setCurrentQuestion({
+      ...currentQuestion,
+      options: updatedOptions,
+    })
+  }
+
+  // Función para crear o encontrar un tipo de pregunta numérico
+  const createOrFindNumberType = async (min: number, max: number) => {
+    const keyName = `numbers_${min}_${max}`
+    const nameEs = `Números del ${min} al ${max}`
+    const nameEn = `Numbers from ${min} to ${max}`
+
+    try {
+      // Primero verificar si ya existe
+      const existingTypes = await questionTypesApi.getQuestionTypes()
+      const existingType = existingTypes.find((type) => type.key_name === keyName)
+
+      if (existingType) {
+        // Ya existe, usar ese ID
+        console.log("Tipo de pregunta ya existe:", existingType)
+        return existingType.id
+      } else {
+        // No existe, crear nuevo
+        console.log("Creando nuevo tipo de pregunta:", { keyName, nameEs, nameEn })
+
+        const newType = await questionTypesApi.createQuestionType({
+          key_name: keyName,
+          name_es: nameEs,
+          name_en: nameEn,
+        })
+
+        console.log("Nuevo tipo creado:", newType)
+        return newType.id
+      }
+    } catch (error) {
+      console.error("Error creando/encontrando tipo de pregunta:", error)
+      throw new Error(
+        language === "es"
+          ? `Error al crear el tipo de pregunta numérica ${min}-${max}`
+          : `Error creating numeric question type ${min}-${max}`,
+      )
+    }
+  }
+
   const saveForm = async () => {
     // Validar campos obligatorios del formulario
     if (!form.keyName || !form.nameEs || !form.nameEn) {
-      alert("Por favor complete todos los campos obligatorios del formulario.")
+      alert(
+        language === "es"
+          ? "Por favor complete todos los campos obligatorios del formulario."
+          : "Please complete all required form fields.",
+      )
       return
     }
 
     // Validar que haya al menos una pregunta
     if (questions.length === 0) {
-      alert("El formulario debe tener al menos una pregunta.")
+      alert(
+        language === "es"
+          ? "El formulario debe tener al menos una pregunta."
+          : "The form must have at least one question.",
+      )
       return
     }
 
     try {
-      // Crear el formulario usando la API
+      setIsSaving(true)
+
+      // 1. Primero, crear todos los tipos de pregunta numéricos necesarios
+      const questionsWithNumberTypes = [...questions]
+      
+      // Procesar todas las preguntas con tipo numérico temporal
+      for (let i = 0; i < questionsWithNumberTypes.length; i++) {
+        const question = questionsWithNumberTypes[i]
+        
+        if (question.questionTypeId === -1 && question.numberRange) {
+          // Crear o encontrar el tipo de pregunta numérico
+          const typeId = await createOrFindNumberType(question.numberRange.min, question.numberRange.max)
+          
+          // Actualizar la pregunta con el ID real
+          questionsWithNumberTypes[i] = {
+            ...question,
+            questionTypeId: typeId,
+            // Ya no necesitamos el numberRange
+            numberRange: undefined
+          }
+        }
+      }
+
+      // 2. Crear el formulario usando la API
       const formData = {
         key_name: form.keyName,
         name_es: form.nameEs,
@@ -228,12 +395,12 @@ export default function NewFormPage() {
       const formResponse = await formsApi.createForm(formData)
       console.log("Formulario creado:", formResponse)
 
-      const formId = formResponse.id
+      const createdFormId = formResponse.id
 
-      // Ahora crear las preguntas una por una
-      for (const question of questions) {
+      // 3. Ahora crear las preguntas una por una con los tipos correctos
+      for (const question of questionsWithNumberTypes) {
         const questionData = {
-          form_id: formId,
+          form_id: createdFormId,
           key_name: question.keyName,
           text_es: question.textEs,
           text_en: question.textEn,
@@ -256,314 +423,90 @@ export default function NewFormPage() {
               order_in_option: option.orderInOption,
             }
 
+            console.log("Creando opción:", optionData)
             await questionsApi.addOption(questionResponse.id, optionData)
           }
+        }
+
+        // Si es una pregunta con opciones y se ha marcado incluir "Otra, especificar"
+        const questionType = questionTypes.find((t) => t.id === question.questionTypeId) || 
+                            { key_name: question.questionTypeId === -1 ? "numbers" : "" }
+                            
+        if (
+          questionType &&
+          (questionType.key_name === "optionandtext" ||
+            questionType.key_name === "optionmultipleandtext" ||
+            questionType.key_name === "optiondropdownandtext") &&
+          question.includeOtherOption
+        ) {
+          const otherOptionData = {
+            key_name: `otra_${questionResponse.id}`,
+            text_es: "Otra, especificar",
+            text_en: "Other, specify",
+            order_in_option: question.options.length + 1,
+          }
+
+          console.log("Agregando opción 'Otra, especificar':", otherOptionData)
+          await questionsApi.addOption(questionResponse.id, otherOptionData)
         }
       }
 
       // Formulario creado exitosamente, redirigir
-      // Redirigir a la lista de formularios
       router.push("/admin/forms")
     } catch (error) {
       console.error("Error creating form:", error)
-      alert("Error al crear el formulario. Por favor, inténtelo de nuevo.")
+      alert(
+        language === "es"
+          ? "Error al crear el formulario. Por favor, inténtelo de nuevo."
+          : "Error creating form. Please try again.",
+      )
+    } finally {
+      setIsSaving(false)
     }
   }
 
   const getQuestionTypeName = (typeId: number) => {
+    if (typeId === -1) {
+      // Es un tipo numérico temporal
+      const question = questions.find(q => q.id === currentQuestion?.id)
+      if (question?.numberRange) {
+        return language === "es" 
+          ? `Números del ${question.numberRange.min} al ${question.numberRange.max}`
+          : `Numbers from ${question.numberRange.min} to ${question.numberRange.max}`
+      }
+      return language === "es" ? "Números (rango personalizado)" : "Numbers (custom range)"
+    }
+    
     const type = questionTypes.find((t) => t.id === typeId)
-    return activeTab === "spanish" ? type?.name_es : type?.name_en
+    return language === "es" ? type?.name_es : type?.name_en
+  }
+
+  const getQuestionTypeNameInList = (typeId: number, question: Question) => {
+    if (typeId === -1 && question.numberRange) {
+      // Es un tipo numérico temporal
+      return language === "es" 
+        ? `Números del ${question.numberRange.min} al ${question.numberRange.max}`
+        : `Numbers from ${question.numberRange.min} to ${question.numberRange.max}`
+    }
+    
+    const type = questionTypes.find((t) => t.id === typeId)
+    return language === "es" ? type?.name_es : type?.name_en
   }
 
   const requiresOptions = (typeId: number) => {
     const type = questionTypes.find((t) => t.id === typeId)
-    return type && (type.key_name === "single_choice" || type.key_name === "multiple_choice")
+    return (
+      type &&
+      (type.key_name === "optionandtext" ||
+        type.key_name === "optionmultipleandtext" ||
+        type.key_name === "optiondropdownandtext")
+    )
   }
 
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-2">
-          <Link href="/admin/forms">
-            <Button variant="outline" size="icon">
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-          </Link>
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Nuevo formulario</h1>
-            <p className="text-muted-foreground">Cree un nuevo formulario para recopilar información</p>
-          </div>
-        </div>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Información del formulario</CardTitle>
-          <CardDescription>Ingrese la información básica del formulario</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="keyName">Clave única</Label>
-            <Input
-              id="keyName"
-              name="keyName"
-              placeholder="ej: initial_evaluation"
-              value={form.keyName}
-              onChange={(e) => handleKeyNameChange(e, "form")}
-            />
-            <p className="text-sm text-muted-foreground">
-              Identificador único para el formulario (solo letras minúsculas y guiones bajos)
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="nameEs">Nombre (Español)</Label>
-              <Input
-                id="nameEs"
-                name="nameEs"
-                placeholder="ej: Evaluación Inicial"
-                value={form.nameEs}
-                onChange={handleFormChange}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="nameEn">Nombre (Inglés)</Label>
-              <Input
-                id="nameEn"
-                name="nameEn"
-                placeholder="ej: Initial Evaluation"
-                value={form.nameEn}
-                onChange={handleFormChange}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="descriptionEs">Descripción (Español)</Label>
-              <Textarea
-                id="descriptionEs"
-                name="descriptionEs"
-                placeholder="Descripción del formulario..."
-                value={form.descriptionEs}
-                onChange={handleFormChange}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="descriptionEn">Descripción (Inglés)</Label>
-              <Textarea
-                id="descriptionEn"
-                name="descriptionEn"
-                placeholder="Form description..."
-                value={form.descriptionEn}
-                onChange={handleFormChange}
-              />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold">Preguntas</h2>
-        <Button onClick={addNewQuestion} disabled={isEditingQuestion}>
-          <Plus className="mr-2 h-4 w-4" />
-          Añadir pregunta
-        </Button>
-      </div>
-
-      {isEditingQuestion && currentQuestion && (
-        <Card>
-          <CardHeader>
-            <CardTitle>
-              {questions.some((q) => q.id === currentQuestion.id) ? "Editar pregunta" : "Nueva pregunta"}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="questionKeyName">Clave única</Label>
-              <Input
-                id="questionKeyName"
-                value={currentQuestion.keyName}
-                onChange={(e) => handleKeyNameChange(e, "question")}
-                placeholder="ej: pain_level"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="questionType">Tipo de pregunta</Label>
-              <Select
-                value={currentQuestion.questionTypeId.toString()}
-                onValueChange={(value) => handleQuestionChange("questionTypeId", Number.parseInt(value))}
-                disabled={isLoadingTypes}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder={isLoadingTypes ? "Cargando tipos..." : "Seleccione un tipo"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {questionTypes.map((type) => (
-                    <SelectItem key={type.id} value={type.id.toString()}>
-                      {activeTab === "spanish" ? type.name_es : type.name_en}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="questionTextEs">Texto de la pregunta (Español)</Label>
-                <Textarea
-                  id="questionTextEs"
-                  value={currentQuestion.textEs}
-                  onChange={(e) => handleQuestionChange("textEs", e.target.value)}
-                  placeholder="ej: ¿Cuál es su nivel de dolor?"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="questionTextEn">Texto de la pregunta (Inglés)</Label>
-                <Textarea
-                  id="questionTextEn"
-                  value={currentQuestion.textEn}
-                  onChange={(e) => handleQuestionChange("textEn", e.target.value)}
-                  placeholder="ej: What is your pain level?"
-                />
-              </div>
-            </div>
-
-            <div className="flex items-center space-x-2">
-              <Switch
-                id="isRequired"
-                checked={currentQuestion.isRequired}
-                onCheckedChange={(checked) => handleQuestionChange("isRequired", checked)}
-              />
-              <Label htmlFor="isRequired">Obligatoria</Label>
-            </div>
-
-            {/* Opciones para preguntas de selección */}
-            {requiresOptions(currentQuestion.questionTypeId) && (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <Label>Opciones</Label>
-                  <Button variant="outline" size="sm" onClick={addOption}>
-                    <Plus className="mr-2 h-3 w-3" />
-                    Añadir opción
-                  </Button>
-                </div>
-
-                {currentQuestion.options.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No hay opciones. Añada al menos una opción.</p>
-                ) : (
-                  <div className="space-y-3">
-                    {currentQuestion.options.map((option) => (
-                      <div key={option.id} className="border p-3 rounded-md">
-                        <div className="flex items-center justify-between mb-2">
-                          <Label className="text-sm font-medium">Opción {option.orderInOption}</Label>
-                          <Button variant="ghost" size="icon" onClick={() => deleteOption(option.id)}>
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                        <div className="space-y-2">
-                          <Input
-                            value={option.keyName}
-                            onChange={(e) => handleOptionKeyNameChange(option.id, e.target.value)}
-                            placeholder="clave_de_la_opcion"
-                            className="mb-2"
-                          />
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                            <Input
-                              value={option.textEs}
-                              onChange={(e) => updateOption(option.id, "textEs", e.target.value)}
-                              placeholder="Texto en español"
-                            />
-                            <Input
-                              value={option.textEn}
-                              onChange={(e) => updateOption(option.id, "textEn", e.target.value)}
-                              placeholder="Text in English"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </CardContent>
-          <CardFooter className="flex justify-between">
-            <Button
-              variant="outline"
-              onClick={() => {
-                setCurrentQuestion(null)
-                setIsEditingQuestion(false)
-              }}
-            >
-              Cancelar
-            </Button>
-            <Button onClick={saveQuestion}>Guardar pregunta</Button>
-          </CardFooter>
-        </Card>
-      )}
-
-      {questions.length > 0 ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>Preguntas del formulario</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {questions.map((question, index) => (
-                <div key={question.id} className="flex items-center justify-between border p-4 rounded-md">
-                  <div className="space-y-1">
-                    <div className="flex items-center space-x-2">
-                      <span className="font-medium">
-                        {index + 1}. {activeTab === "spanish" ? question.textEs : question.textEn}
-                      </span>
-                      {question.isRequired && <span className="text-red-500 text-sm">*</span>}
-                    </div>
-                    <div className="text-sm text-muted-foreground">
-                      <span className="font-medium">Tipo:</span> {getQuestionTypeName(question.questionTypeId)}
-                    </div>
-                    <div className="text-sm text-muted-foreground">
-                      <span className="font-medium">Clave:</span> {question.keyName}
-                    </div>
-                  </div>
-                  <div className="flex space-x-2">
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      onClick={() => editQuestion(question)}
-                      disabled={isEditingQuestion}
-                    >
-                      <Edit className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      onClick={() => deleteQuestion(question.id)}
-                      disabled={isEditingQuestion}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      ) : (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center p-6">
-            <p className="mb-4 text-muted-foreground">
-              No hay preguntas en este formulario. Añada al menos una pregunta.
-            </p>
-          </CardContent>
-        </Card>
-      )}
-
-      <div className="flex justify-end">
-        <Button onClick={saveForm}>
-          <Save className="mr-2 h-4 w-4" />
-          Guardar formulario
-        </Button>
-      </div>
-    </div>
-  )
-}
+  const supportsOtherOption = (typeId: number) => {
+    const type = questionTypes.find((t) => t.id === typeId)
+    return (
+      type &&
+      (type.key_name === "optionandtext" ||
+        type.key_name === "optionmultipleandtext" ||
+        type.key_name === "\
