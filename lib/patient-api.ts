@@ -71,6 +71,7 @@ export interface QuestionOption {
   text_es: string
   text_en: string
   order_in_question: number
+  key_name?: string
 }
 
 export interface FormInstance {
@@ -126,7 +127,7 @@ export const patientAuthApi = {
   login: async (credentials: PatientLoginRequest): Promise<PatientLoginResponse> => {
     console.log("=== PATIENT LOGIN REQUEST ===")
     console.log("URL:", `${config.API_BASE_URL}/patients/login`)
-    console.log("Credentials:", credentials)
+    console.log("Credentials:", { username: credentials.username, password: "[HIDDEN]" })
 
     const response = await fetch(`${config.API_BASE_URL}/patients/login`, {
       method: "POST",
@@ -157,7 +158,20 @@ export const patientAuthApi = {
     }
 
     const data = await response.json()
-    console.log("Login successful, response data:", data)
+    console.log("Login successful, response data:", {
+      user: data.user,
+      token: data.token ? "[TOKEN PRESENTE]" : "[TOKEN AUSENTE]"
+    })
+    
+    // Validar estructura de respuesta
+    if (!data.user || !data.token) {
+      throw new Error("Respuesta de login inválida: faltan datos del usuario o token")
+    }
+
+    if (!data.user.id || !data.user.username || !data.user.email) {
+      throw new Error("Respuesta de login inválida: datos del usuario incompletos")
+    }
+
     return data
   },
 
@@ -170,6 +184,46 @@ export const patientAuthApi = {
       method: "PUT",
       body: JSON.stringify(profileData),
     })
+  },
+
+  changeEmail: async (patientId: number, newEmail: string) => {
+    console.log("=== CHANGE EMAIL REQUEST ===")
+    console.log("URL:", `${config.API_BASE_URL}/patients/cambiarMail/${patientId}`)
+    console.log("New email:", newEmail)
+
+    const response = await fetch(`${config.API_BASE_URL}/patients/cambiarMail/${patientId}`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        "ngrok-skip-browser-warning": "true",
+        ...(localStorage.getItem(config.PATIENT_TOKEN_KEY) && {
+          Authorization: `Bearer ${localStorage.getItem(config.PATIENT_TOKEN_KEY)}`
+        })
+      },
+      body: JSON.stringify({ mail: newEmail }),
+    })
+
+    console.log("Change email response status:", response.status)
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error("Change email error response:", errorText)
+
+      let errorMessage = `HTTP ${response.status}: ${response.statusText}`
+
+      try {
+        const errorData = JSON.parse(errorText)
+        errorMessage = errorData.message || errorMessage
+      } catch (e) {
+        errorMessage = errorText || errorMessage
+      }
+
+      throw new Error(errorMessage)
+    }
+
+    const data = await response.json()
+    console.log("Change email successful:", data)
+    return data
   },
 }
 

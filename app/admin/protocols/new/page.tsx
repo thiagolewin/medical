@@ -303,8 +303,8 @@ export default function NewProtocolPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-6 w-full overflow-x-hidden">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center space-x-2">
           <Link href="/admin/protocols">
             <Button variant="outline" size="icon">
@@ -312,7 +312,7 @@ export default function NewProtocolPage() {
             </Button>
           </Link>
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Nuevo protocolo</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Nuevo protocolo</h1>
             <p className="text-muted-foreground">Cree un nuevo protocolo médico</p>
           </div>
         </div>
@@ -326,13 +326,13 @@ export default function NewProtocolPage() {
           >
             1
           </div>
-          <div className={`w-12 h-1 ${currentStep >= 2 ? "bg-primary" : "bg-muted"}`}></div>
+          <div className={`w-8 sm:w-12 h-1 ${currentStep >= 2 ? "bg-primary" : "bg-muted"}`}></div>
           <div
             className={`flex items-center justify-center w-8 h-8 rounded-full ${currentStep >= 2 ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}
           >
             2
           </div>
-          <div className={`w-12 h-1 ${currentStep >= 3 ? "bg-primary" : "bg-muted"}`}></div>
+          <div className={`w-8 sm:w-12 h-1 ${currentStep >= 3 ? "bg-primary" : "bg-muted"}`}></div>
           <div
             className={`flex items-center justify-center w-8 h-8 rounded-full ${currentStep >= 3 ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}
           >
@@ -343,7 +343,7 @@ export default function NewProtocolPage() {
 
       {/* Paso 1: Información básica del protocolo */}
       {currentStep === 1 && (
-        <Card>
+        <Card className="w-full">
           <CardHeader>
             <CardTitle>Información del protocolo</CardTitle>
             <CardDescription>Ingrese la información básica del protocolo</CardDescription>
@@ -427,7 +427,7 @@ export default function NewProtocolPage() {
       {/* Paso 2: Formularios del protocolo */}
       {currentStep === 2 && (
         <>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <h2 className="text-xl font-semibold">Formularios del protocolo</h2>
             <Button onClick={addNewForm} disabled={isEditingForm || isLoadingForms || getAvailableForms().length === 0}>
               <Plus className="mr-2 h-4 w-4" />
@@ -436,7 +436,7 @@ export default function NewProtocolPage() {
           </div>
 
           {isEditingForm && currentForm && (
-            <Card>
+            <Card className="w-full">
               <CardHeader>
                 <CardTitle>
                   {protocolForms.some((f) => f.id === currentForm.id) ? "Editar formulario" : "Nuevo formulario"}
@@ -487,7 +487,7 @@ export default function NewProtocolPage() {
                   </Select>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="delayDays">Días de retraso</Label>
                     <Input
@@ -523,9 +523,10 @@ export default function NewProtocolPage() {
                   </div>
                 </div>
               </CardContent>
-              <CardFooter className="flex justify-between">
+              <CardFooter className="flex flex-col sm:flex-row justify-between gap-2">
                 <Button
                   variant="outline"
+                  className="w-full sm:w-auto"
                   onClick={() => {
                     setCurrentForm(null)
                     setIsEditingForm(false)
@@ -533,20 +534,25 @@ export default function NewProtocolPage() {
                 >
                   Cancelar
                 </Button>
-                <Button onClick={saveForm}>Guardar formulario</Button>
+                <Button className="w-full sm:w-auto" onClick={saveForm}>
+                  Guardar formulario
+                </Button>
               </CardFooter>
             </Card>
           )}
 
           {protocolForms.length > 0 ? (
-            <Card>
+            <Card className="w-full">
               <CardHeader>
                 <CardTitle>Formularios del protocolo</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
                   {protocolForms.map((form, index) => (
-                    <div key={form.id} className="flex items-center justify-between border p-4 rounded-md">
+                    <div
+                      key={form.id}
+                      className="flex flex-col sm:flex-row sm:items-center justify-between border p-4 rounded-md gap-4"
+                    >
                       <div className="space-y-1">
                         <div className="flex items-center space-x-2">
                           <span className="font-medium">
@@ -580,7 +586,7 @@ export default function NewProtocolPage() {
               </CardContent>
             </Card>
           ) : (
-            <Card>
+            <Card className="w-full">
               <CardContent className="flex flex-col items-center justify-center p-6">
                 <p className="mb-4 text-muted-foreground">
                   No hay formularios en este protocolo. Añada al menos un formulario.
@@ -589,12 +595,12 @@ export default function NewProtocolPage() {
             </Card>
           )}
 
-          <div className="flex justify-between">
-            <Button variant="outline" onClick={prevStep}>
+          <div className="flex flex-col sm:flex-row justify-between gap-2">
+            <Button variant="outline" className="w-full sm:w-auto" onClick={prevStep}>
               <ChevronLeft className="mr-2 h-4 w-4" />
               Anterior
             </Button>
-            <Button onClick={nextStep}>
+            <Button className="w-full sm:w-auto" onClick={nextStep}>
               Siguiente
               <ChevronRight className="ml-2 h-4 w-4" />
             </Button>
@@ -605,7 +611,7 @@ export default function NewProtocolPage() {
       {/* Paso 3: Asignar pacientes */}
       {currentStep === 3 && (
         <>
-          <Card>
+          <Card className="w-full">
             <CardHeader>
               <CardTitle>Asignar pacientes al protocolo</CardTitle>
               <CardDescription>Seleccione los pacientes que desea asignar a este protocolo</CardDescription>
@@ -664,7 +670,7 @@ export default function NewProtocolPage() {
               )}
 
               {selectedPatients.length > 0 && (
-                <div className="flex items-center justify-between bg-muted/50 p-3 rounded-md">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between bg-muted/50 p-3 rounded-md gap-2">
                   <div className="flex items-center">
                     <Check className="h-4 w-4 mr-2 text-primary" />
                     <span>
@@ -680,12 +686,12 @@ export default function NewProtocolPage() {
             </CardContent>
           </Card>
 
-          <div className="flex justify-between">
-            <Button variant="outline" onClick={prevStep}>
+          <div className="flex flex-col sm:flex-row justify-between gap-2">
+            <Button variant="outline" className="w-full sm:w-auto" onClick={prevStep}>
               <ChevronLeft className="mr-2 h-4 w-4" />
               Anterior
             </Button>
-            <Button onClick={saveProtocol} disabled={isSaving}>
+            <Button className="w-full sm:w-auto" onClick={saveProtocol} disabled={isSaving}>
               {isSaving ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />

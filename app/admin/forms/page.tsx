@@ -18,6 +18,8 @@ import {
 } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
 import { formsApi } from "@/lib/api"
+import { ErrorState, InlineError } from "@/components/ui/error-state"
+import { useErrorHandler } from "@/lib/error-handler"
 
 export default function FormsPage() {
   const [searchTerm, setSearchTerm] = useState("")
@@ -25,21 +27,26 @@ export default function FormsPage() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [formToDelete, setFormToDelete] = useState<number | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<Error | null>(null)
+  const [deleteError, setDeleteError] = useState<Error | null>(null)
+  const { handleError } = useErrorHandler()
+
+  const fetchForms = async () => {
+    try {
+      setIsLoading(true)
+      setError(null)
+      const response = await formsApi.getForms()
+      setForms(response || [])
+    } catch (err) {
+      const { error: processedError } = handleError(err, "fetchForms")
+      setError(processedError)
+      setForms([])
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   useEffect(() => {
-    const fetchForms = async () => {
-      try {
-        setIsLoading(true)
-        const response = await formsApi.getForms()
-        setForms(response || [])
-      } catch (error) {
-        console.error("Error fetching forms:", error)
-        setForms([])
-      } finally {
-        setIsLoading(false)
-      }
-    }
-
     fetchForms()
   }, [])
 
@@ -53,20 +60,21 @@ export default function FormsPage() {
   const handleDeleteForm = async () => {
     if (formToDelete !== null) {
       try {
+        setDeleteError(null)
         await formsApi.deleteForm(formToDelete)
         setForms(forms.filter((form) => form.id !== formToDelete))
         setFormToDelete(null)
         setIsDeleteDialogOpen(false)
-      } catch (error) {
-        console.error("Error eliminando formulario:", error)
-        alert("Error al eliminar el formulario. Por favor, inténtelo de nuevo.")
+      } catch (err) {
+        const { error: processedError } = handleError(err, "deleteForm")
+        setDeleteError(processedError)
       }
     }
   }
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <div className="flex items-center justify-center min-h-[400px]">
         <div className="flex flex-col items-center space-y-4">
           <Loader2 className="h-8 w-8 animate-spin" />
           <p className="text-muted-foreground">Cargando formularios...</p>
@@ -75,120 +83,90 @@ export default function FormsPage() {
     )
   }
 
+  if (error) {
+    return (
+      <div className="container mx-auto py-6">
+        <ErrorState error={error} onRetry={fetchForms} title="Error al cargar formularios" />
+      </div>
+    )
+  }
+
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Formularios</h1>
-          <p className="text-muted-foreground">Gestione los formularios del sistema</p>
+    <div className="w-full space-y-4 sm:space-y-6 overflow-x-hidden">
+      {/* Header responsive */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight truncate">Formularios</h1>
+          <p className="text-sm sm:text-base text-muted-foreground">Gestione los formularios del sistema</p>
         </div>
-        <Link href="/admin/forms/new">
-          <Button>
-            <Plus className="mr-2 h-4 w-4" />
-            Nuevo formulario
-          </Button>
-        </Link>
+        <div className="flex-shrink-0">
+          <Link href="/admin/forms/new">
+            <Button className="w-full sm:w-auto">
+              <Plus className="mr-2 h-4 w-4" />
+              <span className="sm:inline">Nuevo formulario</span>
+            </Button>
+          </Link>
+        </div>
       </div>
 
-      <div className="flex items-center">
-        <div className="relative flex-1">
+      {/* Buscador responsive */}
+      <div className="w-full">
+        <div className="relative">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
             type="search"
             placeholder="Buscar formularios..."
-            className="pl-8"
+            className="pl-8 w-full"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
       </div>
 
-      <Tabs defaultValue="list" className="w-full">
-        <TabsList>
-          <TabsTrigger value="list">Lista</TabsTrigger>
-          <TabsTrigger value="cards">Tarjetas</TabsTrigger>
+      {/* Tabs responsive */}
+      <Tabs defaultValue="cards" className="w-full">
+        <TabsList className="grid w-full grid-cols-2 sm:w-auto sm:grid-cols-2">
+          <TabsTrigger value="cards" className="text-xs sm:text-sm">
+            Tarjetas
+          </TabsTrigger>
+          <TabsTrigger value="list" className="text-xs sm:text-sm">
+            Lista
+          </TabsTrigger>
         </TabsList>
-        <TabsContent value="list" className="border-none p-0">
-          <Card>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Nombre (ES)</TableHead>
-                    <TableHead>Nombre (EN)</TableHead>
-                    <TableHead>Clave</TableHead>
-                    <TableHead>Preguntas</TableHead>
-                    <TableHead>Creado</TableHead>
-                    <TableHead className="text-right">Acciones</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredForms.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={6} className="text-center">
-                        No se encontraron formularios
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    filteredForms.map((form) => (
-                      <TableRow key={form.id}>
-                        <TableCell>{form.name_es}</TableCell>
-                        <TableCell>{form.name_en}</TableCell>
-                        <TableCell>{form.key_name}</TableCell>
-                        <TableCell>{form.questionCount || 0}</TableCell>
-                        <TableCell>{new Date(form.created_at).toLocaleDateString()}</TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex justify-end gap-2">
-                            <Link href={`/admin/forms/${form.id}`}>
-                              <Button variant="outline" size="icon">
-                                <Edit className="h-4 w-4" />
-                                <span className="sr-only">Editar</span>
-                              </Button>
-                            </Link>
-                            <Button
-                              variant="outline"
-                              size="icon"
-                              onClick={() => {
-                                setFormToDelete(form.id)
-                                setIsDeleteDialogOpen(true)
-                              }}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                              <span className="sr-only">Eliminar</span>
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
-        <TabsContent value="cards" className="border-none p-0">
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+
+        {/* Vista de tarjetas - por defecto en móvil */}
+        <TabsContent value="cards" className="border-none p-0 mt-4">
+          <div className="grid gap-4 sm:gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
             {filteredForms.length === 0 ? (
-              <p className="col-span-full text-center">No se encontraron formularios</p>
+              <div className="col-span-full text-center py-8">
+                <FileText className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+                <p className="text-gray-500">No se encontraron formularios</p>
+              </div>
             ) : (
               filteredForms.map((form) => (
-                <Card key={form.id}>
-                  <CardHeader className="pb-2">
-                    <div className="flex items-center justify-between">
-                      <CardTitle>{form.name_es}</CardTitle>
-                      <FileText className="h-4 w-4 text-muted-foreground" />
+                <Card key={form.id} className="flex flex-col">
+                  <CardHeader className="pb-2 flex-shrink-0">
+                    <div className="flex items-start justify-between gap-2">
+                      <CardTitle className="text-base sm:text-lg line-clamp-2 min-w-0">{form.name_es}</CardTitle>
+                      <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-1" />
                     </div>
-                    <CardDescription>{form.description_es}</CardDescription>
+                    <CardDescription className="line-clamp-2 text-sm">
+                      {form.description_es || "Sin descripción"}
+                    </CardDescription>
                   </CardHeader>
-                  <CardContent>
-                    <div className="flex items-center justify-between text-sm">
-                      <Badge variant="outline">{form.key_name}</Badge>
-                      <span className="text-muted-foreground">{form.questionCount || 0} preguntas</span>
+                  <CardContent className="flex-1">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-sm">
+                      <Badge variant="outline" className="w-fit">
+                        {form.key_name}
+                      </Badge>
+                      <span className="text-muted-foreground text-xs sm:text-sm">
+                        {form.questionCount || 0} preguntas
+                      </span>
                     </div>
                   </CardContent>
-                  <CardFooter className="flex justify-between">
-                    <Link href={`/admin/forms/${form.id}`}>
-                      <Button variant="outline" size="sm">
+                  <CardFooter className="flex flex-col sm:flex-row gap-2 pt-2">
+                    <Link href={`/admin/forms/${form.id}`} className="flex-1">
+                      <Button variant="outline" size="sm" className="w-full">
                         <Edit className="mr-2 h-4 w-4" />
                         Editar
                       </Button>
@@ -196,6 +174,7 @@ export default function FormsPage() {
                     <Button
                       variant="outline"
                       size="sm"
+                      className="w-full sm:w-auto text-red-600 hover:text-red-700 hover:bg-red-50"
                       onClick={() => {
                         setFormToDelete(form.id)
                         setIsDeleteDialogOpen(true)
@@ -210,21 +189,110 @@ export default function FormsPage() {
             )}
           </div>
         </TabsContent>
+
+        {/* Vista de lista - mejor para desktop */}
+        <TabsContent value="list" className="border-none p-0 mt-4">
+          <Card className="overflow-hidden">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="min-w-[150px]">Nombre (ES)</TableHead>
+                    <TableHead className="min-w-[150px] hidden sm:table-cell">Nombre (EN)</TableHead>
+                    <TableHead className="min-w-[100px]">Clave</TableHead>
+                    <TableHead className="min-w-[80px] text-center">Preguntas</TableHead>
+                    <TableHead className="min-w-[100px] hidden lg:table-cell">Creado</TableHead>
+                    <TableHead className="min-w-[120px] text-right">Acciones</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredForms.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center py-8">
+                        <div className="flex flex-col items-center">
+                          <FileText className="h-8 w-8 text-gray-400 mb-2" />
+                          <span>No se encontraron formularios</span>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    filteredForms.map((form) => (
+                      <TableRow key={form.id}>
+                        <TableCell className="font-medium">
+                          <div className="truncate max-w-[200px]" title={form.name_es}>
+                            {form.name_es}
+                          </div>
+                        </TableCell>
+                        <TableCell className="hidden sm:table-cell">
+                          <div className="truncate max-w-[200px]" title={form.name_en}>
+                            {form.name_en || "-"}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="text-xs">
+                            {form.key_name}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-center">{form.questionCount || 0}</TableCell>
+                        <TableCell className="hidden lg:table-cell text-sm text-muted-foreground">
+                          {new Date(form.created_at).toLocaleDateString()}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-1">
+                            <Link href={`/admin/forms/${form.id}`}>
+                              <Button variant="outline" size="icon" className="h-8 w-8">
+                                <Edit className="h-3 w-3" />
+                                <span className="sr-only">Editar</span>
+                              </Button>
+                            </Link>
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50"
+                              onClick={() => {
+                                setFormToDelete(form.id)
+                                setIsDeleteDialogOpen(true)
+                              }}
+                            >
+                              <Trash2 className="h-3 w-3" />
+                              <span className="sr-only">Eliminar</span>
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </Card>
+        </TabsContent>
       </Tabs>
 
+      {/* Dialog de confirmación */}
       <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-[425px] mx-4">
           <DialogHeader>
             <DialogTitle>Confirmar eliminación</DialogTitle>
             <DialogDescription>
               ¿Está seguro de que desea eliminar este formulario? Esta acción no se puede deshacer.
             </DialogDescription>
           </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)}>
+
+          {deleteError && <InlineError error={deleteError} onRetry={() => setDeleteError(null)} className="my-2" />}
+
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsDeleteDialogOpen(false)
+                setDeleteError(null)
+              }}
+              className="w-full sm:w-auto"
+            >
               Cancelar
             </Button>
-            <Button variant="destructive" onClick={handleDeleteForm}>
+            <Button variant="destructive" onClick={handleDeleteForm} className="w-full sm:w-auto">
               Eliminar
             </Button>
           </DialogFooter>

@@ -1,3 +1,4 @@
+import { ApiError } from "./error-handler"
 import { config } from "./config"
 import { authUtils } from "./auth"
 
@@ -22,31 +23,29 @@ const getHeaders = () => {
 
 // Funciones para manejar errores de la API
 const handleResponse = async (response: Response) => {
-  // Si la respuesta no es exitosa, lanzar un error
   if (!response.ok) {
-    // Intentar obtener el mensaje de error del cuerpo de la respuesta
+    let errorMessage = `Error ${response.status}: ${response.statusText}`
+
     try {
       const errorData = await response.json()
-      throw new Error(errorData.message || `Error ${response.status}: ${response.statusText}`)
+      errorMessage = errorData.message || errorMessage
     } catch (e) {
-      // Si no se puede parsear el cuerpo como JSON, lanzar un error genérico
-      throw new Error(`Error ${response.status}: ${response.statusText}`)
+      // Si no se puede parsear como JSON, usar el mensaje por defecto
     }
+
+    throw new ApiError(errorMessage, response.status)
   }
 
-  // Verificar si la respuesta está vacía
   const contentLength = response.headers.get("content-length")
   if (contentLength === "0") {
     return null
   }
 
-  // Verificar si la respuesta es JSON
   const contentType = response.headers.get("content-type")
   if (contentType && contentType.includes("application/json")) {
     return response.json()
   }
 
-  // Si no es JSON, devolver el texto
   return response.text()
 }
 
@@ -54,14 +53,23 @@ const handleResponse = async (response: Response) => {
 export const usersApi = {
   login: async (credentials: { username: string; password: string }) => {
     try {
+      console.log("usersApi.login - Enviando credenciales:", { username: credentials.username })
+      console.log("usersApi.login - URL:", `${API_BASE_URL}/users/login`)
+
       const response = await fetch(`${API_BASE_URL}/users/login`, {
         method: "POST",
         headers: getHeaders(),
         body: JSON.stringify(credentials),
       })
-      return handleResponse(response)
+
+      console.log("usersApi.login - Response status:", response.status)
+
+      const result = await handleResponse(response)
+      console.log("usersApi.login - Result:", result)
+
+      return result
     } catch (error) {
-      console.error("Error en login:", error)
+      console.error("Error en usersApi.login:", error)
       throw error
     }
   },
@@ -278,14 +286,31 @@ export const questionsApi = {
 
   addOption: async (questionId: number, option: any) => {
     try {
+      console.log(`Agregando opción a pregunta ${questionId}:`, option)
       const response = await fetch(`${API_BASE_URL}/questions/${questionId}/options`, {
         method: "POST",
         headers: getHeaders(),
         body: JSON.stringify(option),
       })
-      return handleResponse(response)
+      const result = await handleResponse(response)
+      console.log(`Opción agregada exitosamente:`, result)
+      return result
     } catch (error) {
       console.error("Error agregando opción:", error)
+      throw error
+    }
+  },
+
+  // Nuevo método para obtener opciones de una pregunta
+  getQuestionOptions: async (questionId: number) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/questions/${questionId}/options`, {
+        method: "GET",
+        headers: getHeaders(),
+      })
+      return handleResponse(response)
+    } catch (error) {
+      console.error("Error obteniendo opciones de pregunta:", error)
       throw error
     }
   },
@@ -302,6 +327,20 @@ export const questionTypesApi = {
       return handleResponse(response)
     } catch (error) {
       console.error("Error obteniendo tipos de pregunta:", error)
+      throw error
+    }
+  },
+
+  createQuestionType: async (questionType: any) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/question-types`, {
+        method: "POST",
+        headers: getHeaders(),
+        body: JSON.stringify(questionType),
+      })
+      return handleResponse(response)
+    } catch (error) {
+      console.error("Error creando tipo de pregunta:", error)
       throw error
     }
   },
