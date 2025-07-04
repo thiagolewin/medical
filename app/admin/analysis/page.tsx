@@ -10,7 +10,6 @@ import { Input } from "@/components/ui/input"
 import { protocolsApi, questionsApi, questionTypesApi } from "@/lib/api"
 import { useLanguage } from "@/lib/language-context"
 import { ChevronRight, ChevronLeft, Search, Plus, Trash2, FileSpreadsheet, Loader2 } from "lucide-react"
-import { config } from "@/lib/config"
 
 // Tipos actualizados según la API real
 interface Protocol {
@@ -130,6 +129,9 @@ export default function AnalysisPage() {
     questionTypes: false,
     query: false,
   })
+
+  // Agregar después de los otros estados
+  const [customAnswers, setCustomAnswers] = useState<{ [conditionId: string]: string }>({})
 
   // Cargar tipos de preguntas al inicio
   useEffect(() => {
@@ -312,6 +314,11 @@ export default function AnalysisPage() {
     return null
   }
 
+  // Agregar después de la función getNumberRange
+  const isOtherOption = (option: QuestionOption): boolean => {
+    return option.key_name === "other" || option.key_name.startsWith("otra_")
+  }
+
   // Validar input numérico
   const handleNumberInput = (value: string, range: { min: number; max: number }): string => {
     // Permitir solo números
@@ -365,13 +372,42 @@ export default function AnalysisPage() {
     setFilterConditions(filterConditions.filter((condition) => condition.id !== id))
   }
 
-  // Actualizar respuestas seleccionadas en una condición
+  // Reemplazar la función updateConditionAnswers existente
   const updateConditionAnswers = (conditionId: string, answers: string[]) => {
     setFilterConditions(
       filterConditions.map((condition) =>
         condition.id === conditionId ? { ...condition, selected_answers: answers } : condition,
       ),
     )
+
+    // Si se deseleccionan todas las opciones "Otra", limpiar la respuesta personalizada
+    const condition = filterConditions.find((c) => c.id === conditionId)
+    if (condition) {
+      const question = getFilteredQuestions().find((q) => q.id === condition.question_id)
+      if (question) {
+        const options = questionOptions[question.id] || []
+        const hasOtherSelected = answers.some((answer) => {
+          const option = options.find((opt) => (isSpanish ? opt.text_es : opt.text_en) === answer)
+          return option && isOtherOption(option)
+        })
+
+        if (!hasOtherSelected) {
+          setCustomAnswers((prev) => {
+            const newCustomAnswers = { ...prev }
+            delete newCustomAnswers[conditionId]
+            return newCustomAnswers
+          })
+        }
+      }
+    }
+  }
+
+  // Agregar después de updateConditionTextAnswer
+  const updateCustomAnswer = (conditionId: string, customText: string) => {
+    setCustomAnswers((prev) => ({
+      ...prev,
+      [conditionId]: customText,
+    }))
   }
 
   // Actualizar respuesta de texto en una condición
@@ -406,115 +442,7 @@ export default function AnalysisPage() {
     setResultFields(resultFields.filter((field) => field.id !== id))
   }
 
-  // Preparar payload para enviar filtros
-  const prepareFilterPayload = (): FilterPayload => {
-    const filtros: FilterPayload["filtros"] = []
-
-    filterConditions.forEach((condition) => {
-      // Si es pregunta de texto o numérica, crear un solo filtro
-      if (
-        condition.question_type_key === "text" ||
-        (condition.question_type_key && condition.question_type_key.startsWith("numbers_"))
-      ) {
-        filtros.push({
-          idForm: condition.form_id,
-          idProtocolo: condition.protocol_id,
-          idPregunta: condition.question_id,
-          anwerText: condition.text_answer || "",
-        })
-      } else {
-        // Para preguntas con opciones, crear un filtro por cada respuesta seleccionada
-        condition.selected_answers.forEach((answer) => {
-          filtros.push({
-            idForm: condition.form_id,
-            idProtocolo: condition.protocol_id,
-            idPregunta: condition.question_id,
-            anwerText: answer,
-          })
-        })
-      }
-    })
-
-    // Obtener los IDs de las preguntas seleccionadas como campos de resultado
-    const traer = resultFields.map((field) => field.question_id)
-
-    return { filtros, traer }
-  }
-
-  // Ejecutar consulta
-  const executeQuery = async () => {
-    setLoadingStates((prev) => ({ ...prev, query: true }))
-
-    try {
-      // Preparar payload con los filtros
-      const payload = prepareFilterPayload()
-      console.log("Enviando filtros:", payload)
-
-      // Enviar filtros al endpoint correcto con POST
-      const API_BASE_URL = config.API_BASE_URL
-      const response = await fetch(`${API_BASE_URL}/responses/analizeData`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-          "ngrok-skip-browser-warning": "true",
-        },
-        body: JSON.stringify(payload),
-      })
-
-      if (!response.ok) {
-        throw new Error(`Error ${response.status}: ${response.statusText}`)
-      }
-
-      // Procesar resultados
-      const data = await response.json()
-      console.log("Resultados recibidos:", data)
-
-      // Usar los datos reales del backend
-      setQueryResults(data || [])
-      setCurrentStep(3)
-    } catch (error) {
-      console.error("Error ejecutando consulta:", error)
-      alert(isSpanish ? "Error al ejecutar la consulta" : "Error executing query")
-    } finally {
-      setLoadingStates((prev) => ({ ...prev, query: false }))
-    }
-  }
-
-  // Exportar a CSV
-  const exportToCSV = () => {
-    if (queryResults.length === 0) return
-
-    const headers = Object.keys(queryResults[0])
-
-    // Función para escapar valores con comas
-    const escapeCSV = (value: any): string => {
-      const stringValue = String(value || "")
-      // Si contiene comas, comillas o saltos de línea, encerrarlo en comillas y escapar comillas internas
-      if (stringValue.includes(",") || stringValue.includes('"') || stringValue.includes("\n")) {
-        return `"${stringValue.replace(/"/g, '""')}"`
-      }
-      return stringValue
-    }
-
-    // Crear filas con valores escapados correctamente
-    const rows = queryResults.map((result) => headers.map((header) => escapeCSV(result[header])).join(","))
-
-    // Unir encabezados y filas con saltos de línea adecuados
-    const csv = [headers.join(","), ...rows].join("\r\n")
-
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = "analysis_results.csv"
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url) // Liberar memoria
-  }
-
-  // Renderizar opciones de respuesta para una pregunta
+  // Reemplazar la función renderAnswerOptions existente
   const renderAnswerOptions = (question: Question, condition: FilterCondition) => {
     const questionType = getQuestionType(question)
 
@@ -578,32 +506,124 @@ export default function AnalysisPage() {
       )
     }
 
+    // Verificar si hay opciones "Otra" seleccionadas
+    const selectedOtherOptions = condition.selected_answers.filter((answer) => {
+      const option = options.find((opt) => (isSpanish ? opt.text_es : opt.text_en) === answer)
+      return option && isOtherOption(option)
+    })
+
     return (
       <div className="space-y-2">
-        {options.map((option) => (
-          <div key={option.id} className="flex items-center space-x-2">
-            <Checkbox
-              id={`${condition.id}-${option.id}`}
-              checked={condition.selected_answers.includes(isSpanish ? option.text_es : option.text_en)}
-              onCheckedChange={(checked) => {
-                const optionText = isSpanish ? option.text_es : option.text_en
-                const currentAnswers = condition.selected_answers
-                const newAnswers = checked
-                  ? [...currentAnswers, optionText]
-                  : currentAnswers.filter((answer) => answer !== optionText)
-                updateConditionAnswers(condition.id, newAnswers)
-              }}
-            />
-            <label htmlFor={`${condition.id}-${option.id}`} className="text-sm">
-              {isSpanish ? option.text_es : option.text_en}
-            </label>
+        {options.map((option) => {
+          const optionText = isSpanish ? option.text_es : option.text_en
+          const isSelected = condition.selected_answers.includes(optionText)
+          const isOther = isOtherOption(option)
+          
+          return (
+            <div key={option.id} className="space-y-2">
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id={`${condition.id}-${option.id}`}
+                  checked={isSelected}
+                  onCheckedChange={(checked) => {
+                    const currentAnswers = condition.selected_answers
+                    const newAnswers = checked
+                      ? [...currentAnswers, optionText]
+                      : currentAnswers.filter((answer) => answer !== optionText)
+                    updateConditionAnswers(condition.id, newAnswers)
+                  }}
+                />
+                <label htmlFor={`${condition.id}-${option.id}`} className="text-sm">
+                  {optionText}
+                </label>
+              </div>
+              
+              {/* Input para respuesta personalizada cuando se selecciona "Otra" */}
+              {isOther && isSelected && (
+                <div className="ml-6 mt-2">
+                  <Input
+                    type="text"
+                    value={customAnswers[condition.id] || ""}
+                    onChange={(e) => updateCustomAnswer(condition.id, e.target.value)}
+                    placeholder={isSpanish ? "Especificar..." : "Specify..."}
+                    className="text-sm"
+                  />
+                </div>
+              )}
+            </div>
+          )
+        })}
+        
+        {/* Mostrar respuestas personalizadas activas */}
+        {selectedOtherOptions.length > 0 && customAnswers[condition.id] && (
+          <div className="mt-2 p-2 bg-blue-50 rounded border">
+            <div className="text-xs text-gray-600 mb-1">
+              {isSpanish ? "Respuesta personalizada:" : "Custom answer:"}
+            </div>
+            <Badge variant="outline" className="text-sm">
+              {customAnswers[condition.id]}
+            </Badge>
           </div>
-        ))}
-      </div>
-    )
+        </div>
+      )
   }
 
-  // Verificar si una condición está completa
+  // Reemplazar la función prepareFilterPayload existente
+  const prepareFilterPayload = (): FilterPayload => {
+    const filtros: FilterPayload["filtros"] = []
+
+    filterConditions.forEach((condition) => {
+      // Si es pregunta de texto o numérica, crear un solo filtro
+      if (
+        condition.question_type_key === "text" ||
+        (condition.question_type_key && condition.question_type_key.startsWith("numbers_"))
+      ) {
+        filtros.push({
+          idForm: condition.form_id,
+          idProtocolo: condition.protocol_id,
+          idPregunta: condition.question_id,
+          anwerText: condition.text_answer || "",
+        })
+      } else {
+        // Para preguntas con opciones
+        const question = getFilteredQuestions().find((q) => q.id === condition.question_id)
+        const options = question ? questionOptions[question.id] || [] : []
+
+        condition.selected_answers.forEach((answer) => {
+          // Verificar si es una opción "Otra"
+          const option = options.find((opt) => (isSpanish ? opt.text_es : opt.text_en) === answer)
+
+          if (option && isOtherOption(option)) {
+            // Para opciones "Otra", usar la respuesta personalizada
+            const customAnswer = customAnswers[condition.id]
+            if (customAnswer && customAnswer.trim()) {
+              filtros.push({
+                idForm: condition.form_id,
+                idProtocolo: condition.protocol_id,
+                idPregunta: condition.question_id,
+                anwerText: customAnswer.trim(),
+              })
+            }
+          } else {
+            // Para opciones normales, usar el texto de la opción
+            filtros.push({
+              idForm: condition.form_id,
+              idProtocolo: condition.protocol_id,
+              idPregunta: condition.question_id,
+              anwerText: answer,
+            })
+          }
+        })
+      }
+    })
+
+    // Obtener los IDs de las preguntas seleccionadas como campos de resultado
+    const traer = resultFields.map((field) => field.question_id)
+
+    return { filtros, traer }
+  }
+
+  // Reemplazar la función isConditionComplete existente
   const isConditionComplete = (condition: FilterCondition): boolean => {
     const questionType = questionTypes[condition.question_type_id]
     if (!questionType) return false
@@ -630,7 +650,25 @@ export default function AnalysisPage() {
     }
 
     // Para preguntas con opciones
-    return condition.selected_answers.length > 0
+    if (condition.selected_answers.length === 0) return false
+
+    // Verificar si hay opciones "Otra" seleccionadas que requieren respuesta personalizada
+    const question = getFilteredQuestions().find((q) => q.id === condition.question_id)
+    if (question) {
+      const options = questionOptions[question.id] || []
+      const hasOtherSelected = condition.selected_answers.some((answer) => {
+        const option = options.find((opt) => (isSpanish ? opt.text_es : opt.text_en) === answer)
+        return option && isOtherOption(option)
+      })
+
+      // Si hay opciones "Otra" seleccionadas, verificar que tengan respuesta personalizada
+      if (hasOtherSelected) {
+        const customAnswer = customAnswers[condition.id]
+        return !!(customAnswer && customAnswer.trim())
+      }
+    }
+
+    return true
   }
 
   return (
