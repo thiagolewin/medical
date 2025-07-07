@@ -12,7 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Loader2, Download, Search, Filter, BarChart3, HelpCircle } from "lucide-react"
 import { useLanguage } from "@/lib/language-context"
-import { protocolsApi, questionsApi, questionTypesApi, analysisApi } from "@/lib/api"
+import { protocolsApi, questionsApi, questionTypesApi, analysisApi, formsApi } from "@/lib/api"
 
 interface Protocol {
   id: number
@@ -225,18 +225,37 @@ export default function AnalysisPage() {
       setLoadingStates((prev) => ({ ...prev, forms: true }))
       setError("")
       console.log("Cargando formularios para protocolo:", protocolId)
+
+      // Usar el endpoint correcto: GET /protocols/{protocolId}/forms
       const formsData = await protocolsApi.getProtocolForms(protocolId)
       console.log("Formularios cargados:", formsData)
 
-      // Transform protocol forms to regular forms format
-      const transformedForms = formsData.map((pf: any) => ({
-        id: pf.form_id,
-        key_name: pf.form_key || `form_${pf.form_id}`,
-        name_es: pf.form_name_es,
-        name_en: pf.form_name_en,
-        protocol_id: pf.protocol_id,
-      }))
-      setForms(transformedForms)
+      // Obtener detalles completos de cada formulario usando su form_id
+      const formsWithDetails = await Promise.all(
+        formsData.map(async (pf: any) => {
+          try {
+            const formDetails = await formsApi.getForm(pf.form_id)
+            return {
+              id: pf.form_id,
+              key_name: formDetails.key_name || `form_${pf.form_id}`,
+              name_es: pf.form_name_es || formDetails.name_es,
+              name_en: pf.form_name_en || formDetails.name_en,
+              protocol_id: pf.protocol_id,
+            }
+          } catch (error) {
+            console.error(`Error loading form details for form ${pf.form_id}:`, error)
+            return {
+              id: pf.form_id,
+              key_name: `form_${pf.form_id}`,
+              name_es: pf.form_name_es,
+              name_en: pf.form_name_en,
+              protocol_id: pf.protocol_id,
+            }
+          }
+        }),
+      )
+
+      setForms(formsWithDetails)
     } catch (error) {
       console.error("Error loading forms:", error)
       setError(`${t.errorLoadingData} formularios: ${error}`)
