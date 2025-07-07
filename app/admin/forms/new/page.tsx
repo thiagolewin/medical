@@ -6,6 +6,16 @@ import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { formsApi, questionTypesApi, questionsApi } from "@/lib/api"
 import { useLanguage } from "@/lib/language-context"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Badge } from "@/components/ui/badge"
+import { Trash2, Plus, Edit, GripVertical } from "lucide-react"
 
 interface QuestionType {
   id: number
@@ -29,7 +39,7 @@ interface Question {
   orderInForm: number
   options: Option[]
   includeOtherOption?: boolean
-  numberRange?: NumberRange // Para almacenar temporalmente el rango numérico
+  numberRange?: NumberRange
 }
 
 interface Option {
@@ -214,7 +224,10 @@ export default function NewFormPage() {
     }
 
     // Si es una pregunta numérica temporal, validar que tenga rango
-    if (currentQuestion.questionTypeId === -1 && (!currentQuestion.numberRange || !currentQuestion.numberRange.min || !currentQuestion.numberRange.max)) {
+    if (
+      currentQuestion.questionTypeId === -1 &&
+      (!currentQuestion.numberRange || !currentQuestion.numberRange.min || !currentQuestion.numberRange.max)
+    ) {
       alert(
         language === "es"
           ? "Por favor configure el rango numérico para esta pregunta."
@@ -278,25 +291,6 @@ export default function NewFormPage() {
   const handleQuestionChange = (field: string, value: any) => {
     if (!currentQuestion) return
     setCurrentQuestion({ ...currentQuestion, [field]: value })
-  }
-
-  const handleDragEnd = (result: any) => {
-    if (!result.destination || !currentQuestion) return
-
-    const items = Array.from(currentQuestion.options)
-    const [reorderedItem] = items.splice(result.source.index, 1)
-    items.splice(result.destination.index, 0, reorderedItem)
-
-    // Actualizar el orden de las opciones
-    const updatedOptions = items.map((item, index) => ({
-      ...item,
-      orderInOption: index + 1,
-    }))
-
-    setCurrentQuestion({
-      ...currentQuestion,
-      options: updatedOptions,
-    })
   }
 
   // Función para crear o encontrar un tipo de pregunta numérico
@@ -363,21 +357,21 @@ export default function NewFormPage() {
 
       // 1. Primero, crear todos los tipos de pregunta numéricos necesarios
       const questionsWithNumberTypes = [...questions]
-      
+
       // Procesar todas las preguntas con tipo numérico temporal
       for (let i = 0; i < questionsWithNumberTypes.length; i++) {
         const question = questionsWithNumberTypes[i]
-        
+
         if (question.questionTypeId === -1 && question.numberRange) {
           // Crear o encontrar el tipo de pregunta numérico
           const typeId = await createOrFindNumberType(question.numberRange.min, question.numberRange.max)
-          
+
           // Actualizar la pregunta con el ID real
           questionsWithNumberTypes[i] = {
             ...question,
             questionTypeId: typeId,
             // Ya no necesitamos el numberRange
-            numberRange: undefined
+            numberRange: undefined,
           }
         }
       }
@@ -429,9 +423,10 @@ export default function NewFormPage() {
         }
 
         // Si es una pregunta con opciones y se ha marcado incluir "Otra, especificar"
-        const questionType = questionTypes.find((t) => t.id === question.questionTypeId) || 
-                            { key_name: question.questionTypeId === -1 ? "numbers" : "" }
-                            
+        const questionType = questionTypes.find((t) => t.id === question.questionTypeId) || {
+          key_name: question.questionTypeId === -1 ? "numbers" : "",
+        }
+
         if (
           questionType &&
           (questionType.key_name === "optionandtext" ||
@@ -468,15 +463,15 @@ export default function NewFormPage() {
   const getQuestionTypeName = (typeId: number) => {
     if (typeId === -1) {
       // Es un tipo numérico temporal
-      const question = questions.find(q => q.id === currentQuestion?.id)
+      const question = questions.find((q) => q.id === currentQuestion?.id)
       if (question?.numberRange) {
-        return language === "es" 
+        return language === "es"
           ? `Números del ${question.numberRange.min} al ${question.numberRange.max}`
           : `Numbers from ${question.numberRange.min} to ${question.numberRange.max}`
       }
       return language === "es" ? "Números (rango personalizado)" : "Numbers (custom range)"
     }
-    
+
     const type = questionTypes.find((t) => t.id === typeId)
     return language === "es" ? type?.name_es : type?.name_en
   }
@@ -484,11 +479,11 @@ export default function NewFormPage() {
   const getQuestionTypeNameInList = (typeId: number, question: Question) => {
     if (typeId === -1 && question.numberRange) {
       // Es un tipo numérico temporal
-      return language === "es" 
+      return language === "es"
         ? `Números del ${question.numberRange.min} al ${question.numberRange.max}`
         : `Numbers from ${question.numberRange.min} to ${question.numberRange.max}`
     }
-    
+
     const type = questionTypes.find((t) => t.id === typeId)
     return language === "es" ? type?.name_es : type?.name_en
   }
@@ -509,4 +504,387 @@ export default function NewFormPage() {
       type &&
       (type.key_name === "optionandtext" ||
         type.key_name === "optionmultipleandtext" ||
-        type.key_name === "\
+        type.key_name === "optiondropdownandtext")
+    )
+  }
+
+  return (
+    <div className="container mx-auto p-6">
+      <div className="mb-6">
+        <h1 className="text-3xl font-bold">{language === "es" ? "Crear Nuevo Formulario" : "Create New Form"}</h1>
+        <p className="text-gray-600 mt-2">
+          {language === "es"
+            ? "Complete la información del formulario y agregue las preguntas necesarias."
+            : "Fill in the form information and add the necessary questions."}
+        </p>
+      </div>
+
+      {/* Información del formulario */}
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle>{language === "es" ? "Información del Formulario" : "Form Information"}</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="keyName">{language === "es" ? "Nombre Clave" : "Key Name"} *</Label>
+              <Input
+                id="keyName"
+                name="keyName"
+                value={form.keyName}
+                onChange={(e) => handleKeyNameChange(e, "form")}
+                placeholder={language === "es" ? "ej: formulario_inicial" : "e.g: initial_form"}
+              />
+            </div>
+            <div>
+              <Label htmlFor="nameEs">{language === "es" ? "Nombre (Español)" : "Name (Spanish)"} *</Label>
+              <Input
+                id="nameEs"
+                name="nameEs"
+                value={form.nameEs}
+                onChange={handleFormChange}
+                placeholder={language === "es" ? "Nombre del formulario en español" : "Form name in Spanish"}
+              />
+            </div>
+            <div>
+              <Label htmlFor="nameEn">{language === "es" ? "Nombre (Inglés)" : "Name (English)"} *</Label>
+              <Input
+                id="nameEn"
+                name="nameEn"
+                value={form.nameEn}
+                onChange={handleFormChange}
+                placeholder={language === "es" ? "Nombre del formulario en inglés" : "Form name in English"}
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="descriptionEs">
+                {language === "es" ? "Descripción (Español)" : "Description (Spanish)"}
+              </Label>
+              <Textarea
+                id="descriptionEs"
+                name="descriptionEs"
+                value={form.descriptionEs}
+                onChange={handleFormChange}
+                placeholder={
+                  language === "es" ? "Descripción del formulario en español" : "Form description in Spanish"
+                }
+              />
+            </div>
+            <div>
+              <Label htmlFor="descriptionEn">
+                {language === "es" ? "Descripción (Inglés)" : "Description (English)"}
+              </Label>
+              <Textarea
+                id="descriptionEn"
+                name="descriptionEn"
+                value={form.descriptionEn}
+                onChange={handleFormChange}
+                placeholder={language === "es" ? "Descripción del formulario en inglés" : "Form description in English"}
+              />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Lista de preguntas */}
+      <Card className="mb-6">
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle>
+            {language === "es" ? "Preguntas del Formulario" : "Form Questions"} ({questions.length})
+          </CardTitle>
+          <Button onClick={addNewQuestion}>
+            <Plus className="w-4 h-4 mr-2" />
+            {language === "es" ? "Agregar Pregunta" : "Add Question"}
+          </Button>
+        </CardHeader>
+        <CardContent>
+          {questions.length === 0 ? (
+            <p className="text-gray-500 text-center py-8">
+              {language === "es"
+                ? "No hay preguntas agregadas. Haga clic en 'Agregar Pregunta' para comenzar."
+                : "No questions added. Click 'Add Question' to get started."}
+            </p>
+          ) : (
+            <div className="space-y-4">
+              {questions
+                .sort((a, b) => a.orderInForm - b.orderInForm)
+                .map((question, index) => (
+                  <div key={question.id} className="border rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center space-x-2">
+                        <GripVertical className="w-4 h-4 text-gray-400" />
+                        <span className="font-medium">
+                          {index + 1}. {language === "es" ? question.textEs : question.textEn}
+                        </span>
+                        {question.isRequired && (
+                          <Badge variant="destructive" className="text-xs">
+                            {language === "es" ? "Requerida" : "Required"}
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="flex space-x-2">
+                        <Button variant="outline" size="sm" onClick={() => editQuestion(question)}>
+                          <Edit className="w-4 h-4" />
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={() => deleteQuestion(question.id)}>
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="text-sm text-gray-600">
+                      <p>
+                        <strong>{language === "es" ? "Tipo:" : "Type:"}</strong>{" "}
+                        {getQuestionTypeNameInList(question.questionTypeId, question)}
+                      </p>
+                      <p>
+                        <strong>{language === "es" ? "Clave:" : "Key:"}</strong> {question.keyName}
+                      </p>
+                      {question.options.length > 0 && (
+                        <p>
+                          <strong>{language === "es" ? "Opciones:" : "Options:"}</strong> {question.options.length}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Diálogo para editar pregunta */}
+      <Dialog open={isEditingQuestion} onOpenChange={setIsEditingQuestion}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {currentQuestion?.id && questions.some((q) => q.id === currentQuestion.id)
+                ? language === "es"
+                  ? "Editar Pregunta"
+                  : "Edit Question"
+                : language === "es"
+                  ? "Nueva Pregunta"
+                  : "New Question"}
+            </DialogTitle>
+          </DialogHeader>
+          {currentQuestion && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="questionKeyName">{language === "es" ? "Nombre Clave" : "Key Name"} *</Label>
+                  <Input
+                    id="questionKeyName"
+                    value={currentQuestion.keyName}
+                    onChange={(e) => handleKeyNameChange(e, "question")}
+                    placeholder={language === "es" ? "ej: pregunta_edad" : "e.g: age_question"}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="questionType">{language === "es" ? "Tipo de Pregunta" : "Question Type"} *</Label>
+                  {isLoadingTypes ? (
+                    <div className="h-10 bg-gray-100 rounded animate-pulse" />
+                  ) : (
+                    <Select value={currentQuestion.questionTypeId.toString()} onValueChange={handleQuestionTypeChange}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {questionTypes.map((type) => (
+                          <SelectItem key={type.id} value={type.id.toString()}>
+                            {language === "es" ? type.name_es : type.name_en}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="questionTextEs">{language === "es" ? "Texto (Español)" : "Text (Spanish)"} *</Label>
+                  <Textarea
+                    id="questionTextEs"
+                    value={currentQuestion.textEs}
+                    onChange={(e) => handleQuestionChange("textEs", e.target.value)}
+                    placeholder={language === "es" ? "Texto de la pregunta en español" : "Question text in Spanish"}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="questionTextEn">{language === "es" ? "Texto (Inglés)" : "Text (English)"} *</Label>
+                  <Textarea
+                    id="questionTextEn"
+                    value={currentQuestion.textEn}
+                    onChange={(e) => handleQuestionChange("textEn", e.target.value)}
+                    placeholder={language === "es" ? "Texto de la pregunta en inglés" : "Question text in English"}
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="isRequired"
+                  checked={currentQuestion.isRequired}
+                  onCheckedChange={(checked) => handleQuestionChange("isRequired", checked)}
+                />
+                <Label htmlFor="isRequired">{language === "es" ? "Pregunta requerida" : "Required question"}</Label>
+              </div>
+
+              {/* Opciones para preguntas de selección */}
+              {requiresOptions(currentQuestion.questionTypeId) && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-lg font-medium">
+                      {language === "es" ? "Opciones de Respuesta" : "Answer Options"}
+                    </Label>
+                    <Button type="button" onClick={addOption} size="sm">
+                      <Plus className="w-4 h-4 mr-2" />
+                      {language === "es" ? "Agregar Opción" : "Add Option"}
+                    </Button>
+                  </div>
+
+                  {currentQuestion.options.length === 0 ? (
+                    <p className="text-gray-500 text-center py-4">
+                      {language === "es"
+                        ? "No hay opciones agregadas. Haga clic en 'Agregar Opción' para comenzar."
+                        : "No options added. Click 'Add Option' to get started."}
+                    </p>
+                  ) : (
+                    <div className="space-y-3">
+                      {currentQuestion.options
+                        .sort((a, b) => a.orderInOption - b.orderInOption)
+                        .map((option, index) => (
+                          <div key={option.id} className="border rounded-lg p-3">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="font-medium text-sm">
+                                {language === "es" ? "Opción" : "Option"} {index + 1}
+                              </span>
+                              <Button type="button" variant="outline" size="sm" onClick={() => deleteOption(option.id)}>
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                              <div>
+                                <Label className="text-xs">{language === "es" ? "Clave" : "Key"}</Label>
+                                <Input
+                                  value={option.keyName}
+                                  onChange={(e) => handleOptionKeyNameChange(option.id, e.target.value)}
+                                  placeholder={language === "es" ? "ej: opcion_a" : "e.g: option_a"}
+                                  className="text-sm"
+                                />
+                              </div>
+                              <div>
+                                <Label className="text-xs">
+                                  {language === "es" ? "Texto (Español)" : "Text (Spanish)"}
+                                </Label>
+                                <Input
+                                  value={option.textEs}
+                                  onChange={(e) => updateOption(option.id, "textEs", e.target.value)}
+                                  placeholder={language === "es" ? "Texto en español" : "Text in Spanish"}
+                                  className="text-sm"
+                                />
+                              </div>
+                              <div>
+                                <Label className="text-xs">
+                                  {language === "es" ? "Texto (Inglés)" : "Text (English)"}
+                                </Label>
+                                <Input
+                                  value={option.textEn}
+                                  onChange={(e) => updateOption(option.id, "textEn", e.target.value)}
+                                  placeholder={language === "es" ? "Texto en inglés" : "Text in English"}
+                                  className="text-sm"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                  )}
+
+                  {/* Opción para incluir "Otra, especificar" */}
+                  {supportsOtherOption(currentQuestion.questionTypeId) && (
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="includeOtherOption"
+                        checked={currentQuestion.includeOtherOption || false}
+                        onCheckedChange={(checked) => handleQuestionChange("includeOtherOption", checked)}
+                      />
+                      <Label htmlFor="includeOtherOption">
+                        {language === "es" ? "Incluir opción 'Otra, especificar'" : "Include 'Other, specify' option"}
+                      </Label>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="flex justify-end space-x-2 pt-4">
+                <Button type="button" variant="outline" onClick={() => setIsEditingQuestion(false)}>
+                  {language === "es" ? "Cancelar" : "Cancel"}
+                </Button>
+                <Button type="button" onClick={saveQuestion}>
+                  {language === "es" ? "Guardar Pregunta" : "Save Question"}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Diálogo para configurar rango numérico */}
+      <Dialog open={isNumberDialogOpen} onOpenChange={setIsNumberDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{language === "es" ? "Configurar Rango Numérico" : "Configure Numeric Range"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="minValue">{language === "es" ? "Valor Mínimo" : "Minimum Value"}</Label>
+                <Input
+                  id="minValue"
+                  type="number"
+                  value={numberRange.min}
+                  onChange={(e) => setNumberRange({ ...numberRange, min: Number(e.target.value) })}
+                />
+              </div>
+              <div>
+                <Label htmlFor="maxValue">{language === "es" ? "Valor Máximo" : "Maximum Value"}</Label>
+                <Input
+                  id="maxValue"
+                  type="number"
+                  value={numberRange.max}
+                  onChange={(e) => setNumberRange({ ...numberRange, max: Number(e.target.value) })}
+                />
+              </div>
+            </div>
+            <div className="flex justify-end space-x-2">
+              <Button type="button" variant="outline" onClick={() => setIsNumberDialogOpen(false)}>
+                {language === "es" ? "Cancelar" : "Cancel"}
+              </Button>
+              <Button type="button" onClick={confirmNumberRange}>
+                {language === "es" ? "Confirmar" : "Confirm"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Botones de acción */}
+      <div className="flex justify-end space-x-4">
+        <Button type="button" variant="outline" onClick={() => router.push("/admin/forms")}>
+          {language === "es" ? "Cancelar" : "Cancel"}
+        </Button>
+        <Button type="button" onClick={saveForm} disabled={isSaving}>
+          {isSaving
+            ? language === "es"
+              ? "Guardando..."
+              : "Saving..."
+            : language === "es"
+              ? "Crear Formulario"
+              : "Create Form"}
+        </Button>
+      </div>
+    </div>
+  )
+}

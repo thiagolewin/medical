@@ -1,82 +1,89 @@
-import { ApiError } from "./error-handler"
 import { config } from "./config"
-import { authUtils } from "./auth"
 
-// Configuración de la API
-const API_BASE_URL = config.API_BASE_URL
+const getHeaders = () => ({
+  "Content-Type": "application/json",
+  "ngrok-skip-browser-warning": "true",
+  ...(localStorage.getItem(config.TOKEN_KEY) && {
+    Authorization: `Bearer ${localStorage.getItem(config.TOKEN_KEY)}`,
+  }),
+})
 
-// Headers comunes para todas las peticiones
-const getHeaders = () => {
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    "ngrok-skip-browser-warning": "true", // Para evitar el warning de ngrok
-  }
-
-  // Agregar token de autenticación si existe
-  const token = authUtils.getToken()
-  if (token) {
-    headers["Authorization"] = `Bearer ${token}`
-  }
-
-  return headers
-}
-
-// Funciones para manejar errores de la API
 const handleResponse = async (response: Response) => {
   if (!response.ok) {
-    let errorMessage = `Error ${response.status}: ${response.statusText}`
-
-    try {
-      const errorData = await response.json()
-      errorMessage = errorData.message || errorMessage
-    } catch (e) {
-      // Si no se puede parsear como JSON, usar el mensaje por defecto
-    }
-
-    throw new ApiError(errorMessage, response.status)
+    throw new Error(`HTTP error! status: ${response.status}`)
   }
-
-  const contentLength = response.headers.get("content-length")
-  if (contentLength === "0") {
-    return null
-  }
-
-  const contentType = response.headers.get("content-type")
-  if (contentType && contentType.includes("application/json")) {
-    return response.json()
-  }
-
-  return response.text()
+  return response.json()
 }
 
-// API para la gestión de usuarios
-export const usersApi = {
+// Auth API
+export const authApi = {
   login: async (credentials: { username: string; password: string }) => {
     try {
-      console.log("usersApi.login - Enviando credenciales:", { username: credentials.username })
-      console.log("usersApi.login - URL:", `${API_BASE_URL}/users/login`)
-
-      const response = await fetch(`${API_BASE_URL}/users/login`, {
+      const response = await fetch(`${config.API_BASE_URL}/auth/login`, {
         method: "POST",
-        headers: getHeaders(),
+        headers: {
+          "Content-Type": "application/json",
+          "ngrok-skip-browser-warning": "true",
+        },
         body: JSON.stringify(credentials),
       })
-
-      console.log("usersApi.login - Response status:", response.status)
-
-      const result = await handleResponse(response)
-      console.log("usersApi.login - Result:", result)
-
-      return result
+      return handleResponse(response)
     } catch (error) {
-      console.error("Error en usersApi.login:", error)
+      console.error("Error en login:", error)
       throw error
     }
   },
 
-  createUser: async (userData: any) => {
+  logout: async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/users`, {
+      const response = await fetch(`${config.API_BASE_URL}/auth/logout`, {
+        method: "POST",
+        headers: getHeaders(),
+      })
+      return handleResponse(response)
+    } catch (error) {
+      console.error("Error en logout:", error)
+      throw error
+    }
+  },
+}
+
+// Users API
+export const usersApi = {
+  getUsers: async () => {
+    try {
+      const response = await fetch(`${config.API_BASE_URL}/users`, {
+        method: "GET",
+        headers: getHeaders(),
+      })
+      return handleResponse(response)
+    } catch (error) {
+      console.error("Error obteniendo usuarios:", error)
+      throw error
+    }
+  },
+
+  getUser: async (id: number) => {
+    try {
+      const response = await fetch(`${config.API_BASE_URL}/users/${id}`, {
+        method: "GET",
+        headers: getHeaders(),
+      })
+      return handleResponse(response)
+    } catch (error) {
+      console.error("Error obteniendo usuario:", error)
+      throw error
+    }
+  },
+
+  createUser: async (userData: {
+    username: string
+    email: string
+    password: string
+    role: string
+  }) => {
+    try {
+      const response = await fetch(`${config.API_BASE_URL}/users/register`, {
         method: "POST",
         headers: getHeaders(),
         body: JSON.stringify(userData),
@@ -88,35 +95,16 @@ export const usersApi = {
     }
   },
 
-  getUsers: async () => {
+  updateUser: async (
+    id: number,
+    userData: {
+      username: string
+      email: string
+      role: string
+    },
+  ) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/users`, {
-        method: "GET",
-        headers: getHeaders(),
-      })
-      return handleResponse(response)
-    } catch (error) {
-      console.error("Error obteniendo usuarios:", error)
-      throw error
-    }
-  },
-
-  getUser: async (userId: number) => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/users/${userId}`, {
-        method: "GET",
-        headers: getHeaders(),
-      })
-      return handleResponse(response)
-    } catch (error) {
-      console.error("Error obteniendo usuario:", error)
-      throw error
-    }
-  },
-
-  updateUser: async (userId: number, userData: any) => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/users/${userId}`, {
+      const response = await fetch(`${config.API_BASE_URL}/users/${id}`, {
         method: "PUT",
         headers: getHeaders(),
         body: JSON.stringify(userData),
@@ -128,9 +116,9 @@ export const usersApi = {
     }
   },
 
-  deleteUser: async (userId: number) => {
+  deleteUser: async (id: number) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/users/${userId}`, {
+      const response = await fetch(`${config.API_BASE_URL}/users/${id}`, {
         method: "DELETE",
         headers: getHeaders(),
       })
@@ -142,27 +130,24 @@ export const usersApi = {
   },
 }
 
-// API para la gestión de formularios
+// Forms API
 export const formsApi = {
   getForms: async () => {
     try {
-      console.log("Llamando a API: GET /forms")
-      const response = await fetch(`${API_BASE_URL}/forms`, {
+      const response = await fetch(`${config.API_BASE_URL}/forms`, {
         method: "GET",
         headers: getHeaders(),
       })
-      console.log("Respuesta de API recibida: GET /forms", response.status)
-      const data = await handleResponse(response)
-      return data || []
+      return handleResponse(response)
     } catch (error) {
       console.error("Error obteniendo formularios:", error)
       throw error
     }
   },
 
-  getForm: async (formId: number) => {
+  getForm: async (id: number) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/forms/${formId}`, {
+      const response = await fetch(`${config.API_BASE_URL}/forms/${id}`, {
         method: "GET",
         headers: getHeaders(),
       })
@@ -173,12 +158,12 @@ export const formsApi = {
     }
   },
 
-  createForm: async (form: any) => {
+  createForm: async (formData: any) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/forms`, {
+      const response = await fetch(`${config.API_BASE_URL}/forms`, {
         method: "POST",
         headers: getHeaders(),
-        body: JSON.stringify(form),
+        body: JSON.stringify(formData),
       })
       return handleResponse(response)
     } catch (error) {
@@ -187,12 +172,12 @@ export const formsApi = {
     }
   },
 
-  updateForm: async (formId: number, form: any) => {
+  updateForm: async (id: number, formData: any) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/forms/${formId}`, {
+      const response = await fetch(`${config.API_BASE_URL}/forms/${id}`, {
         method: "PUT",
         headers: getHeaders(),
-        body: JSON.stringify(form),
+        body: JSON.stringify(formData),
       })
       return handleResponse(response)
     } catch (error) {
@@ -201,9 +186,9 @@ export const formsApi = {
     }
   },
 
-  deleteForm: async (formId: number) => {
+  deleteForm: async (id: number) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/forms/${formId}`, {
+      const response = await fetch(`${config.API_BASE_URL}/forms/${id}`, {
         method: "DELETE",
         headers: getHeaders(),
       })
@@ -215,25 +200,122 @@ export const formsApi = {
   },
 }
 
-// API para la gestión de preguntas
-export const questionsApi = {
-  createQuestion: async (question: any) => {
+// Protocols API
+export const protocolsApi = {
+  getProtocols: async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/questions`, {
-        method: "POST",
+      const response = await fetch(`${config.API_BASE_URL}/protocols`, {
+        method: "GET",
         headers: getHeaders(),
-        body: JSON.stringify(question),
       })
       return handleResponse(response)
     } catch (error) {
-      console.error("Error creando pregunta:", error)
+      console.error("Error obteniendo protocolos:", error)
       throw error
     }
   },
 
+  getProtocol: async (id: number) => {
+    try {
+      const response = await fetch(`${config.API_BASE_URL}/protocols/${id}`, {
+        method: "GET",
+        headers: getHeaders(),
+      })
+      return handleResponse(response)
+    } catch (error) {
+      console.error("Error obteniendo protocolo:", error)
+      throw error
+    }
+  },
+
+  createProtocol: async (protocolData: any) => {
+    try {
+      const response = await fetch(`${config.API_BASE_URL}/protocols`, {
+        method: "POST",
+        headers: getHeaders(),
+        body: JSON.stringify(protocolData),
+      })
+      return handleResponse(response)
+    } catch (error) {
+      console.error("Error creando protocolo:", error)
+      throw error
+    }
+  },
+
+  updateProtocol: async (id: number, protocolData: any) => {
+    try {
+      const response = await fetch(`${config.API_BASE_URL}/protocols/${id}`, {
+        method: "PUT",
+        headers: getHeaders(),
+        body: JSON.stringify(protocolData),
+      })
+      return handleResponse(response)
+    } catch (error) {
+      console.error("Error actualizando protocolo:", error)
+      throw error
+    }
+  },
+
+  deleteProtocol: async (id: number) => {
+    try {
+      const response = await fetch(`${config.API_BASE_URL}/protocols/${id}`, {
+        method: "DELETE",
+        headers: getHeaders(),
+      })
+      return handleResponse(response)
+    } catch (error) {
+      console.error("Error eliminando protocolo:", error)
+      throw error
+    }
+  },
+
+  getProtocolForms: async (protocolId: number) => {
+    try {
+      const response = await fetch(`${config.API_BASE_URL}/protocols/${protocolId}/forms`, {
+        method: "GET",
+        headers: getHeaders(),
+      })
+      return handleResponse(response)
+    } catch (error) {
+      console.error("Error obteniendo formularios del protocolo:", error)
+      throw error
+    }
+  },
+
+  updateProtocolForms: async (protocolId: number, formsData: any) => {
+    try {
+      const response = await fetch(`${config.API_BASE_URL}/protocols/${protocolId}/forms`, {
+        method: "PUT",
+        headers: getHeaders(),
+        body: JSON.stringify(formsData),
+      })
+      return handleResponse(response)
+    } catch (error) {
+      console.error("Error actualizando formularios del protocolo:", error)
+      throw error
+    }
+  },
+
+  addFormToProtocol: async (protocolId: number, formId: number, formData: any) => {
+    try {
+      const response = await fetch(`${config.API_BASE_URL}/protocols/${protocolId}/forms/${formId}`, {
+        method: "POST",
+        headers: getHeaders(),
+        body: JSON.stringify(formData),
+      })
+      return handleResponse(response)
+    } catch (error) {
+      console.error("Error agregando formulario al protocolo:", error)
+      throw error
+    }
+  },
+}
+
+// Questions API
+export const questionsApi = {
   getQuestionsByForm: async (formId: number) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/questions/form/${formId}`, {
+      const response = await fetch(`${config.API_BASE_URL}/questions/form/${formId}`, {
         method: "GET",
         headers: getHeaders(),
       })
@@ -244,67 +326,23 @@ export const questionsApi = {
     }
   },
 
-  getQuestion: async (questionId: number) => {
+  createQuestion: async (questionData: any) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/questions/${questionId}`, {
-        method: "GET",
-        headers: getHeaders(),
-      })
-      return handleResponse(response)
-    } catch (error) {
-      console.error("Error obteniendo pregunta:", error)
-      throw error
-    }
-  },
-
-  updateQuestion: async (questionId: number, question: any) => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/questions/${questionId}`, {
-        method: "PUT",
-        headers: getHeaders(),
-        body: JSON.stringify(question),
-      })
-      return handleResponse(response)
-    } catch (error) {
-      console.error("Error actualizando pregunta:", error)
-      throw error
-    }
-  },
-
-  deleteQuestion: async (questionId: number) => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/questions/${questionId}`, {
-        method: "DELETE",
-        headers: getHeaders(),
-      })
-      return handleResponse(response)
-    } catch (error) {
-      console.error("Error eliminando pregunta:", error)
-      throw error
-    }
-  },
-
-  addOption: async (questionId: number, option: any) => {
-    try {
-      console.log(`Agregando opción a pregunta ${questionId}:`, option)
-      const response = await fetch(`${API_BASE_URL}/questions/${questionId}/options`, {
+      const response = await fetch(`${config.API_BASE_URL}/questions`, {
         method: "POST",
         headers: getHeaders(),
-        body: JSON.stringify(option),
+        body: JSON.stringify(questionData),
       })
-      const result = await handleResponse(response)
-      console.log(`Opción agregada exitosamente:`, result)
-      return result
+      return handleResponse(response)
     } catch (error) {
-      console.error("Error agregando opción:", error)
+      console.error("Error creando pregunta:", error)
       throw error
     }
   },
 
-  // Nuevo método para obtener opciones de una pregunta
   getQuestionOptions: async (questionId: number) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/questions/${questionId}/options`, {
+      const response = await fetch(`${config.API_BASE_URL}/questions/${questionId}/options`, {
         method: "GET",
         headers: getHeaders(),
       })
@@ -314,13 +352,27 @@ export const questionsApi = {
       throw error
     }
   },
+
+  addOption: async (questionId: number, optionData: any) => {
+    try {
+      const response = await fetch(`${config.API_BASE_URL}/questions/${questionId}/options`, {
+        method: "POST",
+        headers: getHeaders(),
+        body: JSON.stringify(optionData),
+      })
+      return handleResponse(response)
+    } catch (error) {
+      console.error("Error agregando opción:", error)
+      throw error
+    }
+  },
 }
 
-// API para tipos de pregunta
+// Question Types API
 export const questionTypesApi = {
   getQuestionTypes: async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/question-types`, {
+      const response = await fetch(`${config.API_BASE_URL}/question-types`, {
         method: "GET",
         headers: getHeaders(),
       })
@@ -331,12 +383,12 @@ export const questionTypesApi = {
     }
   },
 
-  createQuestionType: async (questionType: any) => {
+  createQuestionType: async (typeData: any) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/question-types`, {
+      const response = await fetch(`${config.API_BASE_URL}/question-types`, {
         method: "POST",
         headers: getHeaders(),
-        body: JSON.stringify(questionType),
+        body: JSON.stringify(typeData),
       })
       return handleResponse(response)
     } catch (error) {
@@ -346,43 +398,24 @@ export const questionTypesApi = {
   },
 }
 
-// API para nacionalidades
-export const nationalitiesApi = {
-  getNationalities: async () => {
+// Patients API
+export const patientsApi = {
+  getPatients: async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/patients/nationalities`, {
+      const response = await fetch(`${config.API_BASE_URL}/patients`, {
         method: "GET",
         headers: getHeaders(),
       })
       return handleResponse(response)
-    } catch (error) {
-      console.error("Error obteniendo nacionalidades:", error)
-      throw error
-    }
-  },
-}
-
-// API para la gestión de pacientes
-export const patientsApi = {
-  getPatients: async () => {
-    try {
-      console.log("Llamando a API: GET /patients")
-      const response = await fetch(`${API_BASE_URL}/patients`, {
-        method: "GET",
-        headers: getHeaders(),
-      })
-      console.log("Respuesta de API recibida: GET /patients", response.status)
-      const data = await handleResponse(response)
-      return data || []
     } catch (error) {
       console.error("Error obteniendo pacientes:", error)
       throw error
     }
   },
 
-  getPatient: async (patientId: number) => {
+  getPatient: async (id: number) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/patients/${patientId}`, {
+      const response = await fetch(`${config.API_BASE_URL}/patients/${id}`, {
         method: "GET",
         headers: getHeaders(),
       })
@@ -393,12 +426,19 @@ export const patientsApi = {
     }
   },
 
-  createPatient: async (patient: any) => {
+  createPatient: async (patientData: {
+    first_name: string
+    last_name: string
+    email: string
+    phone: string
+    date_of_birth: string
+    nationality_id: number
+  }) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/patients`, {
+      const response = await fetch(`${config.API_BASE_URL}/patients`, {
         method: "POST",
         headers: getHeaders(),
-        body: JSON.stringify(patient),
+        body: JSON.stringify(patientData),
       })
       return handleResponse(response)
     } catch (error) {
@@ -407,12 +447,22 @@ export const patientsApi = {
     }
   },
 
-  updatePatient: async (patientId: number, patient: any) => {
+  updatePatient: async (
+    id: number,
+    patientData: {
+      first_name: string
+      last_name: string
+      email: string
+      phone: string
+      date_of_birth: string
+      nationality_id: number
+    },
+  ) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/patients/${patientId}`, {
+      const response = await fetch(`${config.API_BASE_URL}/patients/${id}`, {
         method: "PUT",
         headers: getHeaders(),
-        body: JSON.stringify(patient),
+        body: JSON.stringify(patientData),
       })
       return handleResponse(response)
     } catch (error) {
@@ -421,9 +471,9 @@ export const patientsApi = {
     }
   },
 
-  deletePatient: async (patientId: number) => {
+  deletePatient: async (id: number) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/patients/${patientId}`, {
+      const response = await fetch(`${config.API_BASE_URL}/patients/${id}`, {
         method: "DELETE",
         headers: getHeaders(),
       })
@@ -435,147 +485,27 @@ export const patientsApi = {
   },
 }
 
-// API para la gestión de protocolos
-export const protocolsApi = {
-  getProtocols: async () => {
+// Nationalities API - CORREGIDO: usar /patients/nationalities
+export const nationalitiesApi = {
+  getNationalities: async () => {
     try {
-      console.log("Llamando a API: GET /protocols")
-      const response = await fetch(`${API_BASE_URL}/protocols`, {
-        method: "GET",
-        headers: getHeaders(),
-      })
-      console.log("Respuesta de API recibida: GET /protocols", response.status)
-      const data = await handleResponse(response)
-      return data || []
-    } catch (error) {
-      console.error("Error obteniendo protocolos:", error)
-      throw error
-    }
-  },
-
-  getProtocol: async (protocolId: number) => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/protocols/${protocolId}`, {
+      const response = await fetch(`${config.API_BASE_URL}/patients/nationalities`, {
         method: "GET",
         headers: getHeaders(),
       })
       return handleResponse(response)
     } catch (error) {
-      console.error("Error obteniendo protocolo:", error)
-      throw error
-    }
-  },
-
-  createProtocol: async (protocol: any) => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/protocols`, {
-        method: "POST",
-        headers: getHeaders(),
-        body: JSON.stringify(protocol),
-      })
-      return handleResponse(response)
-    } catch (error) {
-      console.error("Error creando protocolo:", error)
-      throw error
-    }
-  },
-
-  updateProtocol: async (protocolId: number, protocol: any) => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/protocols/${protocolId}`, {
-        method: "PUT",
-        headers: getHeaders(),
-        body: JSON.stringify(protocol),
-      })
-      return handleResponse(response)
-    } catch (error) {
-      console.error("Error actualizando protocolo:", error)
-      throw error
-    }
-  },
-
-  deleteProtocol: async (protocolId: number) => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/protocols/${protocolId}`, {
-        method: "DELETE",
-        headers: getHeaders(),
-      })
-      return handleResponse(response)
-    } catch (error) {
-      console.error("Error eliminando protocolo:", error)
-      throw error
-    }
-  },
-
-  addFormToProtocol: async (protocolId: number, formId: number, formData: any) => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/protocols/${protocolId}/forms/${formId}`, {
-        method: "POST",
-        headers: getHeaders(),
-        body: JSON.stringify(formData),
-      })
-      return handleResponse(response)
-    } catch (error) {
-      console.error("Error agregando formulario a protocolo:", error)
-      throw error
-    }
-  },
-
-  getProtocolForms: async (protocolId: number) => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/protocols/${protocolId}/forms`, {
-        method: "GET",
-        headers: getHeaders(),
-      })
-      return handleResponse(response)
-    } catch (error) {
-      console.error("Error obteniendo formularios del protocolo:", error)
-      throw error
-    }
-  },
-
-  // Nuevo método para actualizar formularios de un protocolo
-  updateProtocolForms: async (protocolId: number, forms: any) => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/protocols/${protocolId}/forms`, {
-        method: "PUT",
-        headers: getHeaders(),
-        body: JSON.stringify(forms),
-      })
-      return handleResponse(response)
-    } catch (error) {
-      console.error("Error actualizando formularios del protocolo:", error)
+      console.error("Error obteniendo nacionalidades:", error)
       throw error
     }
   },
 }
 
-// API para patient-protocols (asignación de pacientes a protocolos)
+// Patient Protocols API
 export const patientProtocolsApi = {
-  // Asignar paciente a protocolo
-  assignPatientToProtocol: async (patientId: number, protocolId: number, assignedBy: number) => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/patient-protocols`, {
-        method: "POST",
-        headers: getHeaders(),
-        body: JSON.stringify({
-          patient_id: patientId,
-          protocol_id: protocolId,
-          start_date: new Date().toISOString().split("T")[0], // Fecha actual en formato YYYY-MM-DD
-          assigned_by: assignedBy,
-        }),
-      })
-      return handleResponse(response)
-    } catch (error) {
-      console.error("Error asignando paciente a protocolo:", error)
-      throw error
-    }
-  },
-
-  // Obtener pacientes por protocolo
   getPatientsByProtocol: async (protocolId: number) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/patient-protocols/protocol/${protocolId}`, {
+      const response = await fetch(`${config.API_BASE_URL}/patient-protocols/protocol/${protocolId}`, {
         method: "GET",
         headers: getHeaders(),
       })
@@ -586,13 +516,31 @@ export const patientProtocolsApi = {
     }
   },
 
-  // Actualizar asignaciones de pacientes a protocolo
-  updatePatientProtocolAssignments: async (protocolId: number, patients: any[]) => {
+  assignPatientToProtocol: async (patientId: number, protocolId: number, assignedBy: number) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/patient-protocols/${protocolId}`, {
+      const response = await fetch(`${config.API_BASE_URL}/patient-protocols`, {
+        method: "POST",
+        headers: getHeaders(),
+        body: JSON.stringify({
+          patient_id: patientId,
+          protocol_id: protocolId,
+          start_date: new Date().toISOString(),
+          assigned_by: assignedBy,
+        }),
+      })
+      return handleResponse(response)
+    } catch (error) {
+      console.error("Error asignando paciente al protocolo:", error)
+      throw error
+    }
+  },
+
+  updatePatientProtocolAssignments: async (protocolId: number, assignments: any[]) => {
+    try {
+      const response = await fetch(`${config.API_BASE_URL}/patient-protocols/protocol/${protocolId}/assignments`, {
         method: "PUT",
         headers: getHeaders(),
-        body: JSON.stringify({ patients }),
+        body: JSON.stringify({ assignments }),
       })
       return handleResponse(response)
     } catch (error) {
@@ -602,43 +550,18 @@ export const patientProtocolsApi = {
   },
 }
 
-// API para alertas
-export const alertsApi = {
-  getActiveAlerts: async () => {
+// Analysis API
+export const analysisApi = {
+  executeAnalysis: async (payload: { filtros: any[]; traer: number[] }) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/alerts/active`, {
-        method: "GET",
+      const response = await fetch(`${config.API_BASE_URL}/responses/analizeData`, {
+        method: "POST",
         headers: getHeaders(),
+        body: JSON.stringify(payload),
       })
       return handleResponse(response)
     } catch (error) {
-      console.error("Error obteniendo alertas activas:", error)
-      throw error
-    }
-  },
-
-  getAlertsByPatientProtocol: async (patientProtocolId: number) => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/alerts/patient-protocol/${patientProtocolId}`, {
-        method: "GET",
-        headers: getHeaders(),
-      })
-      return handleResponse(response)
-    } catch (error) {
-      console.error("Error obteniendo alertas:", error)
-      throw error
-    }
-  },
-
-  resolveAlert: async (alertId: number) => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/alerts/${alertId}/resolve`, {
-        method: "PUT",
-        headers: getHeaders(),
-      })
-      return handleResponse(response)
-    } catch (error) {
-      console.error("Error resolviendo alerta:", error)
+      console.error("Error ejecutando análisis:", error)
       throw error
     }
   },

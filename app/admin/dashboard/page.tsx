@@ -1,228 +1,328 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { FileText, ClipboardList, Users, Plus } from "lucide-react"
+import { useState, useEffect } from "react"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { LayoutDashboard, FileText, ClipboardList, Users, BarChart3, Plus, Eye, UserCog } from "lucide-react"
 import Link from "next/link"
-import { formsApi, protocolsApi, patientsApi } from "@/lib/api"
 import { useLanguage } from "@/lib/language-context"
+import { authUtils } from "@/lib/auth"
+import { formsApi, protocolsApi, patientsApi, usersApi } from "@/lib/api"
 
-interface User {
-  id: number
-  name: string
-  role: string
+interface DashboardStats {
+  forms: number
+  protocols: number
+  patients: number
+  users: number
 }
 
-export default function DashboardPage() {
+export default function AdminDashboard() {
   const { language } = useLanguage()
-  const [user, setUser] = useState<User | null>(null)
-  const [stats, setStats] = useState({
-    totalForms: 0,
-    totalProtocols: 0,
-    totalPatients: 0,
+  const [user, setUser] = useState<any>(null)
+  const [userLoaded, setUserLoaded] = useState(false)
+  const [stats, setStats] = useState<DashboardStats>({
+    forms: 0,
+    protocols: 0,
+    patients: 0,
+    users: 0,
   })
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string>("")
+
+  const isAdmin = authUtils.isAdmin()
+  const canEdit = authUtils.canEdit()
+
+  const t = {
+    title: language === "es" ? "Panel de Control" : "Dashboard",
+    welcome: language === "es" ? "Bienvenido" : "Welcome",
+    loadingUser: language === "es" ? "Cargando información del usuario..." : "Loading user information...",
+    overview: language === "es" ? "Resumen del Sistema" : "System Overview",
+    quickActions: language === "es" ? "Acciones Rápidas" : "Quick Actions",
+    recentActivity: language === "es" ? "Actividad Reciente" : "Recent Activity",
+    forms: language === "es" ? "Formularios" : "Forms",
+    protocols: language === "es" ? "Protocolos" : "Protocols",
+    patients: language === "es" ? "Pacientes" : "Patients",
+    users: language === "es" ? "Usuarios" : "Users",
+    createForm: language === "es" ? "Crear Formulario" : "Create Form",
+    createProtocol: language === "es" ? "Crear Protocolo" : "Create Protocol",
+    addPatient: language === "es" ? "Agregar Paciente" : "Add Patient",
+    addUser: language === "es" ? "Agregar Usuario" : "Add User",
+    viewForms: language === "es" ? "Ver Formularios" : "View Forms",
+    viewProtocols: language === "es" ? "Ver Protocolos" : "View Protocols",
+    viewPatients: language === "es" ? "Ver Pacientes" : "View Patients",
+    viewUsers: language === "es" ? "Ver Usuarios" : "View Users",
+    dataAnalysis: language === "es" ? "Análisis de Datos" : "Data Analysis",
+    viewAnalysis: language === "es" ? "Ver Análisis" : "View Analysis",
+    totalForms: language === "es" ? "Total de Formularios" : "Total Forms",
+    totalProtocols: language === "es" ? "Total de Protocolos" : "Total Protocols",
+    totalPatients: language === "es" ? "Total de Pacientes" : "Total Patients",
+    totalUsers: language === "es" ? "Total de Usuarios" : "Total Users",
+    errorLoading: language === "es" ? "Error al cargar datos del dashboard" : "Error loading dashboard data",
+    role: language === "es" ? "Rol" : "Role",
+    admin: language === "es" ? "Administrador" : "Administrator",
+    editor: language === "es" ? "Editor" : "Editor",
+    viewer: language === "es" ? "Visualizador" : "Viewer",
+  }
 
   useEffect(() => {
-    // Cargar usuario
-    try {
-      const storedUser = localStorage.getItem("meditrack_user")
-      console.log("Usuario almacenado:", storedUser)
-      if (storedUser) {
-        const parsedUser = JSON.parse(storedUser)
-        setUser({
-          id: parsedUser.id,
-          name: parsedUser.username || parsedUser.name,
-          role: parsedUser.role,
-        })
-        console.log("Usuario cargado:", parsedUser)
-      }
-    } catch (error) {
-      console.error("Error cargando usuario:", error)
-    }
-
-    // Cargar datos del dashboard
+    const currentUser = authUtils.getUser()
+    setUser(currentUser)
+    setUserLoaded(true)
     loadDashboardData()
   }, [])
 
   const loadDashboardData = async () => {
-    setIsLoading(true)
-    setError(null)
-
     try {
-      console.log("=== INICIANDO CARGA DE DATOS DEL DASHBOARD ===")
+      setLoading(true)
+      setError("")
 
-      // Cargar formularios
-      try {
-        console.log("Cargando formularios...")
-        const forms = await formsApi.getForms()
-        console.log("✅ Formularios cargados:", forms.length)
-        setStats((prev) => ({ ...prev, totalForms: forms.length }))
-      } catch (error) {
-        console.error("❌ Error cargando formularios:", error)
-        setStats((prev) => ({ ...prev, totalForms: 0 }))
-      }
+      const [formsData, protocolsData, patientsData, usersData] = await Promise.allSettled([
+        formsApi.getForms(),
+        protocolsApi.getProtocols(),
+        patientsApi.getPatients(),
+        isAdmin ? usersApi.getUsers() : Promise.resolve([]),
+      ])
 
-      // Cargar protocolos
-      try {
-        console.log("Cargando protocolos...")
-        const protocols = await protocolsApi.getProtocols()
-        console.log("✅ Protocolos cargados:", protocols.length)
-        setStats((prev) => ({ ...prev, totalProtocols: protocols.length }))
-      } catch (error) {
-        console.error("❌ Error cargando protocolos:", error)
-        setStats((prev) => ({ ...prev, totalProtocols: 0 }))
-      }
-
-      // Cargar pacientes
-      try {
-        console.log("Cargando pacientes...")
-        const patients = await patientsApi.getPatients()
-        console.log("✅ Pacientes cargados:", patients.length)
-        setStats((prev) => ({ ...prev, totalPatients: patients.length }))
-      } catch (error) {
-        console.error("❌ Error cargando pacientes:", error)
-        setStats((prev) => ({ ...prev, totalPatients: 0 }))
-      }
-
-      console.log("=== DATOS DEL DASHBOARD CARGADOS ===")
-      console.log("Stats finales:", stats)
-    } catch (error) {
-      console.error("❌ Error general cargando dashboard:", error)
-      setError("Error cargando los datos del dashboard")
+      setStats({
+        forms: formsData.status === "fulfilled" ? formsData.value.length : 0,
+        protocols: protocolsData.status === "fulfilled" ? protocolsData.value.length : 0,
+        patients: patientsData.status === "fulfilled" ? patientsData.value.length : 0,
+        users: usersData.status === "fulfilled" ? usersData.value.length : 0,
+      })
+    } catch (err) {
+      console.error("Error loading dashboard data:", err)
+      setError(`${t.errorLoading}: ${err}`)
     } finally {
-      setIsLoading(false)
+      setLoading(false)
+    }
+  }
+
+  const getRoleBadgeVariant = (role: string) => {
+    switch (role) {
+      case "admin":
+        return "destructive"
+      case "editor":
+        return "default"
+      case "viewer":
+        return "secondary"
+      default:
+        return "outline"
+    }
+  }
+
+  const getRoleText = (role: string) => {
+    switch (role) {
+      case "admin":
+        return t.admin
+      case "editor":
+        return t.editor
+      case "viewer":
+        return t.viewer
+      default:
+        return role
     }
   }
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-        <p className="text-muted-foreground">
-          {user
-            ? language === "es"
-              ? `Bienvenido, ${user.name}`
-              : `Welcome, ${user.name}`
-            : language === "es"
-              ? "Cargando información de usuario..."
-              : "Loading user information..."}
-        </p>
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold flex items-center gap-2">
+            <LayoutDashboard className="w-8 h-8" />
+            {t.title}
+          </h1>
+          <div className="mt-2">
+            {!userLoaded ? (
+              <p className="text-gray-600">{t.loadingUser}</p>
+            ) : user ? (
+              <div className="flex items-center gap-2">
+                <p className="text-gray-600">
+                  {t.welcome}, <span className="font-semibold">{user.username}</span>
+                </p>
+                <Badge variant={getRoleBadgeVariant(user.role)}>{getRoleText(user.role)}</Badge>
+              </div>
+            ) : (
+              <p className="text-gray-600">{t.welcome}</p>
+            )}
+          </div>
+        </div>
       </div>
 
       {error && (
-        <Card className="border-red-200 bg-red-50">
-          <CardContent className="p-6">
-            <p className="text-red-600">{error}</p>
-            <Button onClick={loadDashboardData} className="mt-2" variant="outline">
-              {language === "es" ? "Reintentar" : "Retry"}
-            </Button>
-          </CardContent>
-        </Card>
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       )}
 
-      <div className="grid gap-6 md:grid-cols-3">
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">{language === "es" ? "Formularios" : "Forms"}</CardTitle>
+            <CardTitle className="text-sm font-medium">{t.totalForms}</CardTitle>
             <FileText className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{isLoading ? "..." : stats.totalForms}</div>
-            <p className="text-xs text-muted-foreground">
-              {language === "es" ? "Formularios configurados" : "Configured forms"}
-            </p>
-            <Link href="/admin/forms" className="mt-2 inline-block">
-              <Button size="sm" variant="outline">
-                {language === "es" ? "Ver todos" : "View all"}
-              </Button>
-            </Link>
+            <div className="text-2xl font-bold">{loading ? "..." : stats.forms}</div>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">{language === "es" ? "Protocolos" : "Protocols"}</CardTitle>
+            <CardTitle className="text-sm font-medium">{t.totalProtocols}</CardTitle>
             <ClipboardList className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{isLoading ? "..." : stats.totalProtocols}</div>
-            <p className="text-xs text-muted-foreground">
-              {language === "es" ? "Protocolos activos" : "Active protocols"}
-            </p>
-            <Link href="/admin/protocols" className="mt-2 inline-block">
-              <Button size="sm" variant="outline">
-                {language === "es" ? "Ver todos" : "View all"}
-              </Button>
-            </Link>
+            <div className="text-2xl font-bold">{loading ? "..." : stats.protocols}</div>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">{language === "es" ? "Pacientes" : "Patients"}</CardTitle>
+            <CardTitle className="text-sm font-medium">{t.totalPatients}</CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{isLoading ? "..." : stats.totalPatients}</div>
-            <p className="text-xs text-muted-foreground">
-              {language === "es" ? "Pacientes registrados" : "Registered patients"}
-            </p>
-            <Link href="/admin/patients" className="mt-2 inline-block">
-              <Button size="sm" variant="outline">
-                {language === "es" ? "Ver todos" : "View all"}
-              </Button>
-            </Link>
+            <div className="text-2xl font-bold">{loading ? "..." : stats.patients}</div>
           </CardContent>
         </Card>
-      </div>
 
-      {isLoading && (
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-              <span className="ml-2">{language === "es" ? "Cargando datos..." : "Loading data..."}</span>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {!isLoading && !error && (
-        <div className="grid gap-6 md:grid-cols-3">
+        {isAdmin && (
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center justify-between">
-                {language === "es" ? "Acciones rápidas" : "Quick actions"}
-                <Plus className="h-4 w-4" />
-              </CardTitle>
-              <CardDescription>{language === "es" ? "Crear nuevos elementos" : "Create new items"}</CardDescription>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">{t.totalUsers}</CardTitle>
+              <UserCog className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
-            <CardContent className="space-y-2">
-              <Link href="/admin/forms/new" className="block">
-                <Button className="w-full" variant="outline">
-                  <FileText className="h-4 w-4 mr-2" />
-                  {language === "es" ? "Nuevo Formulario" : "New Form"}
-                </Button>
-              </Link>
-              <Link href="/admin/protocols/new" className="block">
-                <Button className="w-full" variant="outline">
-                  <ClipboardList className="h-4 w-4 mr-2" />
-                  {language === "es" ? "Nuevo Protocolo" : "New Protocol"}
-                </Button>
-              </Link>
-              <Link href="/admin/patients/new" className="block">
-                <Button className="w-full" variant="outline">
-                  <Users className="h-4 w-4 mr-2" />
-                  {language === "es" ? "Nuevo Paciente" : "New Patient"}
-                </Button>
-              </Link>
+            <CardContent>
+              <div className="text-2xl font-bold">{loading ? "..." : stats.users}</div>
             </CardContent>
           </Card>
-        </div>
-      )}
+        )}
+      </div>
+
+      {/* Quick Actions */}
+      <Card>
+        <CardHeader>
+          <CardTitle>{t.quickActions}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {/* Forms Actions */}
+            <div className="space-y-2">
+              <h3 className="font-semibold flex items-center gap-2">
+                <FileText className="w-4 h-4" />
+                {t.forms}
+              </h3>
+              <div className="space-y-2">
+                {isAdmin && (
+                  <Link href="/admin/forms/new">
+                    <Button variant="outline" size="sm" className="w-full justify-start bg-transparent">
+                      <Plus className="w-4 h-4 mr-2" />
+                      {t.createForm}
+                    </Button>
+                  </Link>
+                )}
+                <Link href="/admin/forms">
+                  <Button variant="outline" size="sm" className="w-full justify-start bg-transparent">
+                    <Eye className="w-4 h-4 mr-2" />
+                    {t.viewForms}
+                  </Button>
+                </Link>
+              </div>
+            </div>
+
+            {/* Protocols Actions */}
+            <div className="space-y-2">
+              <h3 className="font-semibold flex items-center gap-2">
+                <ClipboardList className="w-4 h-4" />
+                {t.protocols}
+              </h3>
+              <div className="space-y-2">
+                {isAdmin && (
+                  <Link href="/admin/protocols/new">
+                    <Button variant="outline" size="sm" className="w-full justify-start bg-transparent">
+                      <Plus className="w-4 h-4 mr-2" />
+                      {t.createProtocol}
+                    </Button>
+                  </Link>
+                )}
+                <Link href="/admin/protocols">
+                  <Button variant="outline" size="sm" className="w-full justify-start bg-transparent">
+                    <Eye className="w-4 h-4 mr-2" />
+                    {t.viewProtocols}
+                  </Button>
+                </Link>
+              </div>
+            </div>
+
+            {/* Patients Actions */}
+            <div className="space-y-2">
+              <h3 className="font-semibold flex items-center gap-2">
+                <Users className="w-4 h-4" />
+                {t.patients}
+              </h3>
+              <div className="space-y-2">
+                {isAdmin && (
+                  <Link href="/admin/patients/new">
+                    <Button variant="outline" size="sm" className="w-full justify-start bg-transparent">
+                      <Plus className="w-4 h-4 mr-2" />
+                      {t.addPatient}
+                    </Button>
+                  </Link>
+                )}
+                <Link href="/admin/patients">
+                  <Button variant="outline" size="sm" className="w-full justify-start bg-transparent">
+                    <Eye className="w-4 h-4 mr-2" />
+                    {t.viewPatients}
+                  </Button>
+                </Link>
+              </div>
+            </div>
+
+            {/* Users Actions - Solo para admins */}
+            {isAdmin && (
+              <div className="space-y-2">
+                <h3 className="font-semibold flex items-center gap-2">
+                  <UserCog className="w-4 h-4" />
+                  {t.users}
+                </h3>
+                <div className="space-y-2">
+                  <Link href="/admin/users">
+                    <Button variant="outline" size="sm" className="w-full justify-start bg-transparent">
+                      <Plus className="w-4 h-4 mr-2" />
+                      {t.addUser}
+                    </Button>
+                  </Link>
+                  <Link href="/admin/users">
+                    <Button variant="outline" size="sm" className="w-full justify-start bg-transparent">
+                      <Eye className="w-4 h-4 mr-2" />
+                      {t.viewUsers}
+                    </Button>
+                  </Link>
+                </div>
+              </div>
+            )}
+
+            {/* Analysis Actions */}
+            <div className="space-y-2">
+              <h3 className="font-semibold flex items-center gap-2">
+                <BarChart3 className="w-4 h-4" />
+                {t.dataAnalysis}
+              </h3>
+              <div className="space-y-2">
+                <Link href="/admin/analysis">
+                  <Button variant="outline" size="sm" className="w-full justify-start bg-transparent">
+                    <BarChart3 className="w-4 h-4 mr-2" />
+                    {t.viewAnalysis}
+                  </Button>
+                </Link>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   )
 }

@@ -1,1066 +1,483 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
-import { Input } from "@/components/ui/input"
-import { protocolsApi, questionsApi, questionTypesApi } from "@/lib/api"
+import { BarChart3, Download, RefreshCw } from "lucide-react"
 import { useLanguage } from "@/lib/language-context"
-import { ChevronRight, ChevronLeft, Search, Plus, Trash2, FileSpreadsheet, Loader2 } from "lucide-react"
+import { protocolsApi, analysisApi } from "@/lib/api"
+import { authUtils } from "@/lib/auth"
 
-// Tipos actualizados según la API real
 interface Protocol {
   id: number
-  key_name: string
-  name_es: string
-  name_en: string
-  created_at: string
-  updated_at: string
+  name: string
+  description: string
+  forms?: Form[]
 }
 
-interface ProtocolForm {
+interface Form {
   id: number
-  protocol_id: number
-  form_id: number
-  previous_form_id: number | null
-  delay_days: number
-  repeat_count: number
-  repeat_interval_days: number
-  order_in_protocol: number
-  form_name_es: string
-  form_name_en: string
+  name: string
+  description: string
 }
 
-interface Question {
-  id: number
-  form_id: number
-  key_name: string
-  text_es: string
-  text_en: string
-  question_type_id: number
-  question_type_key?: string
-  is_required: boolean
-  order_in_form: number
-  created_at: string
-  updated_at: string
-  question_type_es: string
-  question_type_en: string
-  options?: QuestionOption[]
-}
-
-interface QuestionOption {
-  id: number
-  question_id: number
-  key_name: string
-  text_es: string
-  text_en: string
-  order_in_option: number
-}
-
-interface QuestionType {
-  id: number
-  key_name: string
-  name_es: string
-  name_en: string
-}
-
-interface FilterCondition {
-  id: string
-  protocol_id: number
-  form_id: number
-  question_id: number
-  question_text: string
-  question_type_id: number
-  question_type_key?: string
-  selected_answers: string[]
-  text_answer?: string
+interface AnalysisFilter {
+  type: string
+  field: string
   operator: string
+  value: any
 }
 
-interface ResultField {
-  id: string
-  protocol_id: number
-  form_id: number
-  question_id: number
-  question_text: string
-}
-
-interface FilterPayload {
-  filtros: {
-    idForm: number
-    idProtocolo: number
-    idPregunta: number
-    anwerText: string
-  }[]
-  traer: number[]
+interface AnalysisResult {
+  data: any[]
+  summary: {
+    total: number
+    filtered: number
+  }
 }
 
 export default function AnalysisPage() {
   const { language } = useLanguage()
-  const isSpanish = language === "es"
-
-  // Estados principales
-  const [currentStep, setCurrentStep] = useState(1)
   const [protocols, setProtocols] = useState<Protocol[]>([])
-  const [protocolForms, setProtocolForms] = useState<{ [protocolId: number]: ProtocolForm[] }>({})
-  const [questions, setQuestions] = useState<{ [formId: number]: Question[] }>({})
-  const [questionOptions, setQuestionOptions] = useState<{ [questionId: number]: QuestionOption[] }>({})
-  const [questionTypes, setQuestionTypes] = useState<{ [typeId: number]: QuestionType }>({})
-
-  // Estados para el paso 1 (filtros)
-  const [selectedProtocols, setSelectedProtocols] = useState<number[]>([])
+  const [selectedProtocol, setSelectedProtocol] = useState<string>("")
+  const [availableForms, setAvailableForms] = useState<Form[]>([])
   const [selectedForms, setSelectedForms] = useState<number[]>([])
-  const [filterConditions, setFilterConditions] = useState<FilterCondition[]>([])
+  const [filters, setFilters] = useState<AnalysisFilter[]>([])
+  const [results, setResults] = useState<AnalysisResult | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [loadingProtocols, setLoadingProtocols] = useState(true)
+  const [error, setError] = useState<string>("")
+  const [success, setSuccess] = useState<string>("")
 
-  // Estados para el paso 2 (campos de resultado)
-  const [resultFields, setResultFields] = useState<ResultField[]>([])
+  const canViewData = authUtils.canViewData()
 
-  // Estados para resultados
-  const [queryResults, setQueryResults] = useState<any[]>([])
-  const [isLoading, setIsLoading] = useState(false)
-  const [loadingStates, setLoadingStates] = useState({
-    protocols: false,
-    forms: false,
-    questions: false,
-    options: false,
-    questionTypes: false,
-    query: false,
-  })
-
-  // Agregar después de los otros estados
-  const [customAnswers, setCustomAnswers] = useState<{ [conditionId: string]: string }>({})
-
-  // Cargar tipos de preguntas al inicio
-  useEffect(() => {
-    const fetchQuestionTypes = async () => {
-      setLoadingStates((prev) => ({ ...prev, questionTypes: true }))
-      try {
-        const typesData = await questionTypesApi.getQuestionTypes()
-        console.log("Tipos de preguntas cargados:", typesData)
-
-        // Convertir array a objeto indexado por ID
-        const typesMap: { [typeId: number]: QuestionType } = {}
-        if (typesData && Array.isArray(typesData)) {
-          typesData.forEach((type: QuestionType) => {
-            typesMap[type.id] = type
-          })
-        }
-        setQuestionTypes(typesMap)
-      } catch (error) {
-        console.error("Error cargando tipos de preguntas:", error)
-      } finally {
-        setLoadingStates((prev) => ({ ...prev, questionTypes: false }))
-      }
-    }
-
-    fetchQuestionTypes()
-  }, [])
-
-  // Cargar protocolos iniciales
-  useEffect(() => {
-    const fetchProtocols = async () => {
-      setLoadingStates((prev) => ({ ...prev, protocols: true }))
-      try {
-        const protocolsData = await protocolsApi.getProtocols()
-        console.log("Protocolos cargados:", protocolsData)
-        setProtocols(protocolsData || [])
-      } catch (error) {
-        console.error("Error cargando protocolos:", error)
-      } finally {
-        setLoadingStates((prev) => ({ ...prev, protocols: false }))
-      }
-    }
-
-    fetchProtocols()
-  }, [])
-
-  // Cargar formularios cuando se seleccionan protocolos
-  useEffect(() => {
-    const fetchProtocolForms = async () => {
-      if (selectedProtocols.length === 0) return
-
-      setLoadingStates((prev) => ({ ...prev, forms: true }))
-      try {
-        const formsData: { [protocolId: number]: ProtocolForm[] } = {}
-
-        for (const protocolId of selectedProtocols) {
-          try {
-            const forms = await protocolsApi.getProtocolForms(protocolId)
-            console.log(`Formularios del protocolo ${protocolId}:`, forms)
-            formsData[protocolId] = forms || []
-          } catch (error) {
-            console.error(`Error cargando formularios del protocolo ${protocolId}:`, error)
-            formsData[protocolId] = []
-          }
-        }
-
-        setProtocolForms(formsData)
-      } catch (error) {
-        console.error("Error cargando formularios:", error)
-      } finally {
-        setLoadingStates((prev) => ({ ...prev, forms: false }))
-      }
-    }
-
-    fetchProtocolForms()
-  }, [selectedProtocols])
-
-  // Cargar preguntas cuando se seleccionan formularios
-  useEffect(() => {
-    const fetchQuestions = async () => {
-      if (selectedForms.length === 0) return
-
-      setLoadingStates((prev) => ({ ...prev, questions: true }))
-      try {
-        const questionsData: { [formId: number]: Question[] } = {}
-
-        for (const formId of selectedForms) {
-          try {
-            const formQuestions = await questionsApi.getQuestionsByForm(formId)
-            console.log(`Preguntas del formulario ${formId}:`, formQuestions)
-            questionsData[formId] = formQuestions || []
-          } catch (error) {
-            console.error(`Error cargando preguntas del formulario ${formId}:`, error)
-            questionsData[formId] = []
-          }
-        }
-
-        setQuestions(questionsData)
-      } catch (error) {
-        console.error("Error cargando preguntas:", error)
-      } finally {
-        setLoadingStates((prev) => ({ ...prev, questions: false }))
-      }
-    }
-
-    fetchQuestions()
-  }, [selectedForms])
-
-  // Obtener formularios filtrados por protocolos seleccionados
-  const getFilteredForms = (): ProtocolForm[] => {
-    const allForms: ProtocolForm[] = []
-    selectedProtocols.forEach((protocolId) => {
-      const forms = protocolForms[protocolId] || []
-      allForms.push(...forms)
-    })
-    return allForms
+  const t = {
+    title: language === "es" ? "Análisis de Datos" : "Data Analysis",
+    subtitle:
+      language === "es"
+        ? "Analiza los datos recopilados de formularios y protocolos"
+        : "Analyze data collected from forms and protocols",
+    selectProtocol: language === "es" ? "Seleccionar Protocolo" : "Select Protocol",
+    selectForms: language === "es" ? "Seleccionar Formularios" : "Select Forms",
+    filters: language === "es" ? "Filtros" : "Filters",
+    addFilter: language === "es" ? "Agregar Filtro" : "Add Filter",
+    executeAnalysis: language === "es" ? "Ejecutar Análisis" : "Execute Analysis",
+    exportResults: language === "es" ? "Exportar Resultados" : "Export Results",
+    results: language === "es" ? "Resultados" : "Results",
+    noProtocols: language === "es" ? "No hay protocolos disponibles" : "No protocols available",
+    noForms:
+      language === "es" ? "No hay formularios disponibles para este protocolo" : "No forms available for this protocol",
+    selectProtocolFirst: language === "es" ? "Selecciona un protocolo primero" : "Select a protocol first",
+    selectFormsFirst: language === "es" ? "Selecciona al menos un formulario" : "Select at least one form",
+    loadingProtocols: language === "es" ? "Cargando protocolos..." : "Loading protocols...",
+    loadingForms: language === "es" ? "Cargando formularios..." : "Loading forms...",
+    executing: language === "es" ? "Ejecutando análisis..." : "Executing analysis...",
+    errorLoadingProtocols: language === "es" ? "Error al cargar protocolos" : "Error loading protocols",
+    errorLoadingForms: language === "es" ? "Error al cargar formularios" : "Error loading forms",
+    errorExecutingAnalysis: language === "es" ? "Error al ejecutar análisis" : "Error executing analysis",
+    analysisCompleted: language === "es" ? "Análisis completado exitosamente" : "Analysis completed successfully",
+    totalRecords: language === "es" ? "Total de registros" : "Total records",
+    filteredRecords: language === "es" ? "Registros filtrados" : "Filtered records",
+    noResults: language === "es" ? "No se encontraron resultados" : "No results found",
+    protocol: language === "es" ? "Protocolo" : "Protocol",
+    form: language === "es" ? "Formulario" : "Form",
+    allForms: language === "es" ? "Todos los formularios" : "All forms",
+    refresh: language === "es" ? "Actualizar" : "Refresh",
+    clear: language === "es" ? "Limpiar" : "Clear",
+    summary: language === "es" ? "Resumen" : "Summary",
+    data: language === "es" ? "Datos" : "Data",
   }
 
-  // Obtener preguntas filtradas por formularios seleccionados
-  const getFilteredQuestions = (): Question[] => {
-    const allQuestions: Question[] = []
-    selectedForms.forEach((formId) => {
-      const formQuestions = questions[formId] || []
-      allQuestions.push(...formQuestions)
-    })
-    return allQuestions
-  }
+  useEffect(() => {
+    loadProtocols()
+  }, [])
 
-  // Cargar opciones de una pregunta
-  const loadQuestionOptions = async (questionId: number) => {
-    if (questionOptions[questionId]) return // Ya cargadas
+  useEffect(() => {
+    if (selectedProtocol) {
+      loadProtocolForms(Number.parseInt(selectedProtocol))
+    } else {
+      setAvailableForms([])
+      setSelectedForms([])
+    }
+  }, [selectedProtocol])
 
-    setLoadingStates((prev) => ({ ...prev, options: true }))
+  const loadProtocols = async () => {
     try {
-      const options = await questionsApi.getQuestionOptions(questionId)
-      console.log(`Opciones de la pregunta ${questionId}:`, options)
-      setQuestionOptions((prev) => ({
-        ...prev,
-        [questionId]: options || [],
-      }))
-    } catch (error) {
-      console.error(`Error cargando opciones de la pregunta ${questionId}:`, error)
-      setQuestionOptions((prev) => ({
-        ...prev,
-        [questionId]: [],
-      }))
+      setLoadingProtocols(true)
+      setError("")
+      console.log("=== Cargando protocolos ===")
+
+      const data = await protocolsApi.getProtocols()
+      console.log("Protocolos obtenidos:", data)
+
+      // Asegurar que data es un array
+      const protocolsArray = Array.isArray(data) ? data : []
+      setProtocols(protocolsArray)
+
+      if (protocolsArray.length === 0) {
+        console.log("No se encontraron protocolos")
+      }
+    } catch (err) {
+      console.error("Error cargando protocolos:", err)
+      setError(`${t.errorLoadingProtocols}: ${err instanceof Error ? err.message : String(err)}`)
+      setProtocols([]) // Asegurar que protocols sea un array vacío en caso de error
     } finally {
-      setLoadingStates((prev) => ({ ...prev, options: false }))
+      setLoadingProtocols(false)
     }
   }
 
-  // Obtener el tipo de pregunta por ID
-  const getQuestionType = (question: Question): QuestionType | null => {
-    return questionTypes[question.question_type_id] || null
-  }
+  const loadProtocolForms = async (protocolId: number) => {
+    try {
+      setLoading(true)
+      setError("")
+      console.log("=== Cargando formularios del protocolo ===", protocolId)
 
-  // Verificar si una pregunta es de tipo texto o numérica
-  const isTextOrNumberQuestion = (question: Question): boolean => {
-    if (!question) return false
+      const data = await protocolsApi.getProtocolForms(protocolId)
+      console.log("Formularios del protocolo obtenidos:", data)
 
-    const questionType = getQuestionType(question)
-    if (!questionType) return false
-
-    return questionType.key_name === "text" || questionType.key_name.startsWith("numbers_")
-  }
-
-  // Obtener información de rango para preguntas numéricas
-  const getNumberRange = (question: Question): { min: number; max: number } | null => {
-    const questionType = getQuestionType(question)
-    if (!questionType || !questionType.key_name.startsWith("numbers_")) {
-      return null
-    }
-
-    const parts = questionType.key_name.split("_")
-    if (parts.length >= 3) {
-      const min = Number.parseInt(parts[1])
-      const max = Number.parseInt(parts[2])
-      return { min, max }
-    }
-
-    return null
-  }
-
-  // Agregar después de la función getNumberRange
-  const isOtherOption = (option: QuestionOption): boolean => {
-    return option.key_name === "other" || option.key_name.startsWith("otra_")
-  }
-
-  // Validar input numérico
-  const handleNumberInput = (value: string, range: { min: number; max: number }): string => {
-    // Permitir solo números
-    const numericValue = value.replace(/[^0-9]/g, "")
-
-    if (numericValue === "") return ""
-
-    const num = Number.parseInt(numericValue)
-
-    // Validar rango
-    if (num < range.min) return range.min.toString()
-    if (num > range.max) return range.max.toString()
-
-    return num.toString()
-  }
-
-  // Agregar condición de filtro
-  const addFilterCondition = async (questionId: number) => {
-    const question = getFilteredQuestions().find((q) => q.id === questionId)
-    if (!question) return
-
-    // Determinar si es una pregunta de texto o numérica
-    const isTextOrNumber = isTextOrNumberQuestion(question)
-
-    // Cargar opciones si la pregunta no es de texto ni numérica
-    if (!isTextOrNumber) {
-      await loadQuestionOptions(questionId)
-    }
-
-    const protocolForm = getFilteredForms().find((f) => f.form_id === question.form_id)
-    const questionType = getQuestionType(question)
-
-    const newCondition: FilterCondition = {
-      id: Date.now().toString(),
-      protocol_id: protocolForm?.protocol_id || 0,
-      form_id: question.form_id,
-      question_id: questionId,
-      question_text: isSpanish ? question.text_es : question.text_en,
-      question_type_id: question.question_type_id,
-      question_type_key: questionType?.key_name,
-      selected_answers: [],
-      text_answer: "",
-      operator: "=",
-    }
-
-    setFilterConditions([...filterConditions, newCondition])
-  }
-
-  // Eliminar condición de filtro
-  const removeFilterCondition = (id: string) => {
-    setFilterConditions(filterConditions.filter((condition) => condition.id !== id))
-  }
-
-  // Reemplazar la función updateConditionAnswers existente
-  const updateConditionAnswers = (conditionId: string, answers: string[]) => {
-    setFilterConditions(
-      filterConditions.map((condition) =>
-        condition.id === conditionId ? { ...condition, selected_answers: answers } : condition,
-      ),
-    )
-
-    // Si se deseleccionan todas las opciones "Otra", limpiar la respuesta personalizada
-    const condition = filterConditions.find((c) => c.id === conditionId)
-    if (condition) {
-      const question = getFilteredQuestions().find((q) => q.id === condition.question_id)
-      if (question) {
-        const options = questionOptions[question.id] || []
-        const hasOtherSelected = answers.some((answer) => {
-          const option = options.find((opt) => (isSpanish ? opt.text_es : opt.text_en) === answer)
-          return option && isOtherOption(option)
-        })
-
-        if (!hasOtherSelected) {
-          setCustomAnswers((prev) => {
-            const newCustomAnswers = { ...prev }
-            delete newCustomAnswers[conditionId]
-            return newCustomAnswers
-          })
+      // Transformar los datos si vienen en formato diferente
+      let forms: Form[] = []
+      if (Array.isArray(data)) {
+        forms = data.map((item: any) => ({
+          id: item.form_id || item.id,
+          name: item.form_name || item.name || `Form ${item.form_id || item.id}`,
+          description: item.form_description || item.description || "",
+        }))
+      } else if (data && typeof data === "object") {
+        // Si data no es array pero es un objeto, intentar extraer forms
+        const formsData = data.forms || data.data || []
+        if (Array.isArray(formsData)) {
+          forms = formsData.map((item: any) => ({
+            id: item.form_id || item.id,
+            name: item.form_name || item.name || `Form ${item.form_id || item.id}`,
+            description: item.form_description || item.description || "",
+          }))
         }
       }
+
+      console.log("Formularios transformados:", forms)
+      setAvailableForms(forms)
+      setSelectedForms([])
+
+      if (forms.length === 0) {
+        console.log("No se encontraron formularios para este protocolo")
+      }
+    } catch (err) {
+      console.error("Error cargando formularios del protocolo:", err)
+      setError(`${t.errorLoadingForms}: ${err}`)
+      setAvailableForms([])
+    } finally {
+      setLoading(false)
     }
   }
 
-  // Agregar después de updateConditionTextAnswer
-  const updateCustomAnswer = (conditionId: string, customText: string) => {
-    setCustomAnswers((prev) => ({
-      ...prev,
-      [conditionId]: customText,
-    }))
+  const handleFormSelection = (formId: number, checked: boolean) => {
+    if (checked) {
+      setSelectedForms([...selectedForms, formId])
+    } else {
+      setSelectedForms(selectedForms.filter((id) => id !== formId))
+    }
   }
 
-  // Actualizar respuesta de texto en una condición
-  const updateConditionTextAnswer = (conditionId: string, text: string) => {
-    setFilterConditions(
-      filterConditions.map((condition) =>
-        condition.id === conditionId ? { ...condition, text_answer: text } : condition,
-      ),
-    )
+  const handleSelectAllForms = (checked: boolean) => {
+    if (checked) {
+      setSelectedForms(availableForms.map((form) => form.id))
+    } else {
+      setSelectedForms([])
+    }
   }
 
-  // Agregar campo de resultado
-  const addResultField = (questionId: number) => {
-    const question = getFilteredQuestions().find((q) => q.id === questionId)
-    if (!question) return
-
-    const protocolForm = getFilteredForms().find((f) => f.form_id === question.form_id)
-
-    const newField: ResultField = {
-      id: Date.now().toString(),
-      protocol_id: protocolForm?.protocol_id || 0,
-      form_id: question.form_id,
-      question_id: questionId,
-      question_text: isSpanish ? question.text_es : question.text_en,
+  const executeAnalysis = async () => {
+    if (!selectedProtocol) {
+      setError(t.selectProtocolFirst)
+      return
     }
 
-    setResultFields([...resultFields, newField])
-  }
-
-  // Eliminar campo de resultado
-  const removeResultField = (id: string) => {
-    setResultFields(resultFields.filter((field) => field.id !== id))
-  }
-
-  // Reemplazar la función renderAnswerOptions existente
-  const renderAnswerOptions = (question: Question, condition: FilterCondition) => {
-    const questionType = getQuestionType(question)
-
-    // Verificar si es una pregunta de texto o numérica
-    if (questionType && (questionType.key_name === "text" || questionType.key_name.startsWith("numbers_"))) {
-      const isNumeric = questionType.key_name.startsWith("numbers_")
-      const range = isNumeric ? getNumberRange(question) : null
-
-      return (
-        <div className="space-y-2">
-          <Input
-            type={isNumeric ? "number" : "text"}
-            value={condition.text_answer || ""}
-            onChange={(e) => {
-              let value = e.target.value
-
-              // Para inputs numéricos, validar el rango
-              if (isNumeric && range) {
-                value = handleNumberInput(value, range)
-              }
-
-              updateConditionTextAnswer(condition.id, value)
-            }}
-            onKeyDown={(e) => {
-              // Para inputs numéricos, bloquear caracteres no numéricos
-              if (isNumeric) {
-                const allowedKeys = ["Backspace", "Delete", "Tab", "Escape", "Enter", "ArrowLeft", "ArrowRight"]
-                if (!allowedKeys.includes(e.key) && !/[0-9]/.test(e.key)) {
-                  e.preventDefault()
-                }
-              }
-            }}
-            placeholder={
-              isNumeric && range
-                ? `${isSpanish ? "Ingrese un número" : "Enter a number"} (${range.min}-${range.max})`
-                : isSpanish
-                  ? "Escriba su respuesta"
-                  : "Type your answer"
-            }
-            min={range?.min}
-            max={range?.max}
-            className="mt-2"
-          />
-          {isNumeric && range && (
-            <div className="text-xs text-gray-500">
-              {isSpanish ? `Rango válido: ${range.min} - ${range.max}` : `Valid range: ${range.min} - ${range.max}`}
-            </div>
-          )}
-        </div>
-      )
+    if (selectedForms.length === 0) {
+      setError(t.selectFormsFirst)
+      return
     }
 
-    const options = questionOptions[question.id] || []
+    try {
+      setLoading(true)
+      setError("")
+      setSuccess("")
+      console.log("=== Ejecutando análisis ===")
+      console.log("Protocolo seleccionado:", selectedProtocol)
+      console.log("Formularios seleccionados:", selectedForms)
+      console.log("Filtros:", filters)
 
-    if (options.length === 0) {
-      return (
-        <div className="flex items-center space-x-2">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          <span className="text-sm text-gray-500">{isSpanish ? "Cargando opciones..." : "Loading options..."}</span>
-        </div>
-      )
+      const payload = {
+        filtros: filters.map((filter) => ({
+          type: filter.type,
+          field: filter.field,
+          operator: filter.operator,
+          value: filter.value,
+        })),
+        traer: selectedForms,
+      }
+
+      console.log("Payload del análisis:", payload)
+
+      const data = await analysisApi.executeAnalysis(payload)
+      console.log("Resultados del análisis:", data)
+
+      setResults(data)
+      setSuccess(t.analysisCompleted)
+    } catch (err) {
+      console.error("Error ejecutando análisis:", err)
+      setError(`${t.errorExecutingAnalysis}: ${err}`)
+    } finally {
+      setLoading(false)
     }
+  }
 
-    // Verificar si hay opciones "Otra" seleccionadas
-    const selectedOtherOptions = condition.selected_answers.filter((answer) => {
-      const option = options.find((opt) => (isSpanish ? opt.text_es : opt.text_en) === answer)
-      return option && isOtherOption(option)
-    })
+  const clearAnalysis = () => {
+    setSelectedProtocol("")
+    setAvailableForms([])
+    setSelectedForms([])
+    setFilters([])
+    setResults(null)
+    setError("")
+    setSuccess("")
+  }
 
+  const exportResults = () => {
+    if (!results) return
+
+    const dataStr = JSON.stringify(results, null, 2)
+    const dataUri = "data:application/json;charset=utf-8," + encodeURIComponent(dataStr)
+
+    const exportFileDefaultName = `analysis_results_${new Date().toISOString().split("T")[0]}.json`
+
+    const linkElement = document.createElement("a")
+    linkElement.setAttribute("href", dataUri)
+    linkElement.setAttribute("download", exportFileDefaultName)
+    linkElement.click()
+  }
+
+  if (!canViewData) {
     return (
-      <div className="space-y-2">
-        {options.map((option) => {
-          const optionText = isSpanish ? option.text_es : option.text_en
-          const isSelected = condition.selected_answers.includes(optionText)
-          const isOther = isOtherOption(option)
-          
-          return (
-            <div key={option.id} className="space-y-2">
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id={`${condition.id}-${option.id}`}
-                  checked={isSelected}
-                  onCheckedChange={(checked) => {
-                    const currentAnswers = condition.selected_answers
-                    const newAnswers = checked
-                      ? [...currentAnswers, optionText]
-                      : currentAnswers.filter((answer) => answer !== optionText)
-                    updateConditionAnswers(condition.id, newAnswers)
-                  }}
-                />
-                <label htmlFor={`${condition.id}-${option.id}`} className="text-sm">
-                  {optionText}
-                </label>
-              </div>
-              
-              {/* Input para respuesta personalizada cuando se selecciona "Otra" */}
-              {isOther && isSelected && (
-                <div className="ml-6 mt-2">
-                  <Input
-                    type="text"
-                    value={customAnswers[condition.id] || ""}
-                    onChange={(e) => updateCustomAnswer(condition.id, e.target.value)}
-                    placeholder={isSpanish ? "Especificar..." : "Specify..."}
-                    className="text-sm"
-                  />
-                </div>
-              )}
-            </div>
-          )
-        })}
-        
-        {/* Mostrar respuestas personalizadas activas */}
-        {selectedOtherOptions.length > 0 && customAnswers[condition.id] && (
-          <div className="mt-2 p-2 bg-blue-50 rounded border">
-            <div className="text-xs text-gray-600 mb-1">
-              {isSpanish ? "Respuesta personalizada:" : "Custom answer:"}
-            </div>
-            <Badge variant="outline" className="text-sm">
-              {customAnswers[condition.id]}
-            </Badge>
-          </div>
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">
+            {language === "es" ? "Acceso Denegado" : "Access Denied"}
+          </h1>
+          <p className="text-gray-600">
+            {language === "es"
+              ? "No tienes permisos para ver esta página."
+              : "You don't have permission to view this page."}
+          </p>
         </div>
-      )
-  }
-
-  // Reemplazar la función prepareFilterPayload existente
-  const prepareFilterPayload = (): FilterPayload => {
-    const filtros: FilterPayload["filtros"] = []
-
-    filterConditions.forEach((condition) => {
-      // Si es pregunta de texto o numérica, crear un solo filtro
-      if (
-        condition.question_type_key === "text" ||
-        (condition.question_type_key && condition.question_type_key.startsWith("numbers_"))
-      ) {
-        filtros.push({
-          idForm: condition.form_id,
-          idProtocolo: condition.protocol_id,
-          idPregunta: condition.question_id,
-          anwerText: condition.text_answer || "",
-        })
-      } else {
-        // Para preguntas con opciones
-        const question = getFilteredQuestions().find((q) => q.id === condition.question_id)
-        const options = question ? questionOptions[question.id] || [] : []
-
-        condition.selected_answers.forEach((answer) => {
-          // Verificar si es una opción "Otra"
-          const option = options.find((opt) => (isSpanish ? opt.text_es : opt.text_en) === answer)
-
-          if (option && isOtherOption(option)) {
-            // Para opciones "Otra", usar la respuesta personalizada
-            const customAnswer = customAnswers[condition.id]
-            if (customAnswer && customAnswer.trim()) {
-              filtros.push({
-                idForm: condition.form_id,
-                idProtocolo: condition.protocol_id,
-                idPregunta: condition.question_id,
-                anwerText: customAnswer.trim(),
-              })
-            }
-          } else {
-            // Para opciones normales, usar el texto de la opción
-            filtros.push({
-              idForm: condition.form_id,
-              idProtocolo: condition.protocol_id,
-              idPregunta: condition.question_id,
-              anwerText: answer,
-            })
-          }
-        })
-      }
-    })
-
-    // Obtener los IDs de las preguntas seleccionadas como campos de resultado
-    const traer = resultFields.map((field) => field.question_id)
-
-    return { filtros, traer }
-  }
-
-  // Reemplazar la función isConditionComplete existente
-  const isConditionComplete = (condition: FilterCondition): boolean => {
-    const questionType = questionTypes[condition.question_type_id]
-    if (!questionType) return false
-
-    // Para preguntas de texto o numéricas
-    if (questionType.key_name === "text" || questionType.key_name.startsWith("numbers_")) {
-      const hasTextAnswer = !!condition.text_answer && condition.text_answer.trim() !== ""
-
-      // Si es numérica, validar también el rango
-      if (questionType.key_name.startsWith("numbers_")) {
-        if (!hasTextAnswer) return false
-
-        const parts = questionType.key_name.split("_")
-        if (parts.length >= 3) {
-          const min = Number.parseInt(parts[1])
-          const max = Number.parseInt(parts[2])
-          const value = Number.parseInt(condition.text_answer)
-
-          return !isNaN(value) && value >= min && value <= max
-        }
-      }
-
-      return hasTextAnswer
-    }
-
-    // Para preguntas con opciones
-    if (condition.selected_answers.length === 0) return false
-
-    // Verificar si hay opciones "Otra" seleccionadas que requieren respuesta personalizada
-    const question = getFilteredQuestions().find((q) => q.id === condition.question_id)
-    if (question) {
-      const options = questionOptions[question.id] || []
-      const hasOtherSelected = condition.selected_answers.some((answer) => {
-        const option = options.find((opt) => (isSpanish ? opt.text_es : opt.text_en) === answer)
-        return option && isOtherOption(option)
-      })
-
-      // Si hay opciones "Otra" seleccionadas, verificar que tengan respuesta personalizada
-      if (hasOtherSelected) {
-        const customAnswer = customAnswers[condition.id]
-        return !!(customAnswer && customAnswer.trim())
-      }
-    }
-
-    return true
+      </div>
+    )
   }
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
+    <div className="container mx-auto p-6 space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">{isSpanish ? "Análisis de Datos" : "Data Analysis"}</h1>
-        <div className="flex items-center space-x-2">
-          <Badge variant={currentStep === 1 ? "default" : "secondary"}>{isSpanish ? "1. Filtros" : "1. Filters"}</Badge>
-          <ChevronRight className="h-4 w-4" />
-          <Badge variant={currentStep === 2 ? "default" : "secondary"}>{isSpanish ? "2. Campos" : "2. Fields"}</Badge>
-          <ChevronRight className="h-4 w-4" />
-          <Badge variant={currentStep === 3 ? "default" : "secondary"}>
-            {isSpanish ? "3. Resultados" : "3. Results"}
-          </Badge>
+        <div>
+          <h1 className="text-3xl font-bold flex items-center gap-2">
+            <BarChart3 className="w-8 h-8" />
+            {t.title}
+          </h1>
+          <p className="text-gray-600 mt-2">{t.subtitle}</p>
+        </div>
+
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={loadProtocols} disabled={loadingProtocols}>
+            <RefreshCw className={`w-4 h-4 mr-2 ${loadingProtocols ? "animate-spin" : ""}`} />
+            {t.refresh}
+          </Button>
+          <Button variant="outline" onClick={clearAnalysis}>
+            {t.clear}
+          </Button>
         </div>
       </div>
 
-      {/* Paso 1: Selección de filtros */}
-      {currentStep === 1 && (
-        <div className="space-y-6">
-          {/* Selección de protocolos */}
-          <Card>
-            <CardHeader>
-              <CardTitle>{isSpanish ? "Seleccionar Protocolos" : "Select Protocols"}</CardTitle>
-              <CardDescription>
-                {isSpanish
-                  ? "Seleccione los protocolos que desea incluir en el análisis"
-                  : "Select the protocols you want to include in the analysis"}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {loadingStates.protocols ? (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="h-6 w-6 animate-spin mr-2" />
-                  <span>{isSpanish ? "Cargando protocolos..." : "Loading protocols..."}</span>
+      {error && (
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+
+      {success && (
+        <Alert>
+          <AlertDescription>{success}</AlertDescription>
+        </Alert>
+      )}
+
+      {/* Protocol Selection */}
+      <Card>
+        <CardHeader>
+          <CardTitle>{t.selectProtocol}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {loadingProtocols ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+              <span className="ml-2">{t.loadingProtocols}</span>
+            </div>
+          ) : protocols.length === 0 ? (
+            <div className="text-center py-8">
+              <p className="text-gray-500">{t.noProtocols}</p>
+            </div>
+          ) : (
+            <Select value={selectedProtocol} onValueChange={setSelectedProtocol}>
+              <SelectTrigger>
+                <SelectValue placeholder={t.selectProtocol} />
+              </SelectTrigger>
+              <SelectContent>
+                {protocols.map((protocol) => (
+                  <SelectItem key={protocol.id} value={protocol.id.toString()}>
+                    {protocol.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Forms Selection */}
+      {selectedProtocol && (
+        <Card>
+          <CardHeader>
+            <CardTitle>{t.selectForms}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {loading ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+                <span className="ml-2">{t.loadingForms}</span>
+              </div>
+            ) : availableForms.length === 0 ? (
+              <div className="text-center py-8">
+                <p className="text-gray-500">{t.noForms}</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="select-all"
+                    checked={selectedForms.length === availableForms.length}
+                    onCheckedChange={handleSelectAllForms}
+                  />
+                  <label htmlFor="select-all" className="text-sm font-medium">
+                    {t.allForms}
+                  </label>
                 </div>
-              ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {protocols.map((protocol) => (
-                    <div key={protocol.id} className="flex items-center space-x-2">
+                  {availableForms.map((form) => (
+                    <div key={form.id} className="flex items-center space-x-2 p-3 border rounded-lg">
                       <Checkbox
-                        id={`protocol-${protocol.id}`}
-                        checked={selectedProtocols.includes(protocol.id)}
-                        onCheckedChange={(checked) => {
-                          if (checked) {
-                            setSelectedProtocols([...selectedProtocols, protocol.id])
-                          } else {
-                            setSelectedProtocols(selectedProtocols.filter((id) => id !== protocol.id))
-                            // Limpiar formularios y condiciones relacionadas
-                            const protocolFormIds = (protocolForms[protocol.id] || []).map((f) => f.form_id)
-                            setSelectedForms(selectedForms.filter((id) => !protocolFormIds.includes(id)))
-                            setFilterConditions(filterConditions.filter((c) => !protocolFormIds.includes(c.form_id)))
-                          }
-                        }}
+                        id={`form-${form.id}`}
+                        checked={selectedForms.includes(form.id)}
+                        onCheckedChange={(checked) => handleFormSelection(form.id, checked as boolean)}
                       />
-                      <label htmlFor={`protocol-${protocol.id}`} className="text-sm font-medium">
-                        {isSpanish ? protocol.name_es : protocol.name_en}
-                      </label>
+                      <div className="flex-1">
+                        <label htmlFor={`form-${form.id}`} className="text-sm font-medium cursor-pointer">
+                          {form.name}
+                        </label>
+                        {form.description && <p className="text-xs text-gray-500 mt-1">{form.description}</p>}
+                      </div>
                     </div>
                   ))}
                 </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Selección de formularios */}
-          {selectedProtocols.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle>{isSpanish ? "Seleccionar Formularios" : "Select Forms"}</CardTitle>
-                <CardDescription>
-                  {isSpanish
-                    ? "Seleccione los formularios de los protocolos elegidos"
-                    : "Select the forms from the chosen protocols"}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {loadingStates.forms ? (
-                  <div className="flex items-center justify-center py-8">
-                    <Loader2 className="h-6 w-6 animate-spin mr-2" />
-                    <span>{isSpanish ? "Cargando formularios..." : "Loading forms..."}</span>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {getFilteredForms().map((form) => (
-                      <div key={form.form_id} className="flex items-center space-x-2">
-                        <Checkbox
-                          id={`form-${form.form_id}`}
-                          checked={selectedForms.includes(form.form_id)}
-                          onCheckedChange={(checked) => {
-                            if (checked) {
-                              setSelectedForms([...selectedForms, form.form_id])
-                            } else {
-                              setSelectedForms(selectedForms.filter((id) => id !== form.form_id))
-                              // Limpiar condiciones relacionadas
-                              setFilterConditions(filterConditions.filter((c) => c.form_id !== form.form_id))
-                            }
-                          }}
-                        />
-                        <label htmlFor={`form-${form.form_id}`} className="text-sm font-medium">
-                          {isSpanish ? form.form_name_es : form.form_name_en}
-                        </label>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Selección de preguntas y respuestas */}
-          {selectedForms.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle>{isSpanish ? "Agregar Condiciones de Filtro" : "Add Filter Conditions"}</CardTitle>
-                <CardDescription>
-                  {isSpanish
-                    ? "Seleccione preguntas y las respuestas que deben tener los pacientes"
-                    : "Select questions and the answers that patients should have"}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {/* Lista de preguntas disponibles */}
-                <div className="border rounded-lg p-4">
-                  <h4 className="font-medium mb-3">{isSpanish ? "Preguntas Disponibles" : "Available Questions"}</h4>
-                  {loadingStates.questions ? (
-                    <div className="flex items-center justify-center py-8">
-                      <Loader2 className="h-6 w-6 animate-spin mr-2" />
-                      <span>{isSpanish ? "Cargando preguntas..." : "Loading questions..."}</span>
-                    </div>
-                  ) : (
-                    <div className="space-y-2 max-h-60 overflow-y-auto">
-                      {getFilteredQuestions().map((question) => {
-                        const questionType = getQuestionType(question)
-                        return (
-                          <div
-                            key={question.id}
-                            className="flex items-center justify-between p-2 border rounded hover:bg-gray-50"
-                          >
-                            <div className="flex-1">
-                              <span className="text-sm font-medium">
-                                {isSpanish ? question.text_es : question.text_en}
-                              </span>
-                              <div className="text-xs text-gray-500 mt-1">
-                                {questionType
-                                  ? isSpanish
-                                    ? questionType.name_es
-                                    : questionType.name_en
-                                  : "Tipo desconocido"}
-                              </div>
-                            </div>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => addFilterCondition(question.id)}
-                              disabled={filterConditions.some((c) => c.question_id === question.id)}
-                            >
-                              <Plus className="h-4 w-4 mr-1" />
-                              {isSpanish ? "Agregar" : "Add"}
-                            </Button>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  )}
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline">
+                    {selectedForms.length} / {availableForms.length} {language === "es" ? "seleccionados" : "selected"}
+                  </Badge>
                 </div>
-
-                {/* Condiciones agregadas */}
-                {filterConditions.length > 0 && (
-                  <div className="space-y-4">
-                    <h4 className="font-medium">{isSpanish ? "Condiciones de Filtro" : "Filter Conditions"}</h4>
-                    {filterConditions.map((condition) => {
-                      const question = getFilteredQuestions().find((q) => q.id === condition.question_id)
-                      const questionType = question ? getQuestionType(question) : null
-                      return (
-                        <div key={condition.id} className="border rounded-lg p-4 space-y-3">
-                          <div className="flex items-center justify-between">
-                            <h5 className="font-medium">{condition.question_text}</h5>
-                            <Button size="sm" variant="ghost" onClick={() => removeFilterCondition(condition.id)}>
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                          {question && renderAnswerOptions(question, condition)}
-
-                          {/* Mostrar respuestas seleccionadas para preguntas con opciones */}
-                          {questionType &&
-                            !questionType.key_name.startsWith("numbers_") &&
-                            questionType.key_name !== "text" &&
-                            condition.selected_answers.length > 0 && (
-                              <div className="flex flex-wrap gap-2 mt-2">
-                                {condition.selected_answers.map((answer, index) => (
-                                  <Badge key={index} variant="secondary">
-                                    {answer}
-                                  </Badge>
-                                ))}
-                                <div className="text-xs text-gray-500 mt-1">
-                                  {isSpanish
-                                    ? `Se enviarán ${condition.selected_answers.length} filtros separados`
-                                    : `${condition.selected_answers.length} separate filters will be sent`}
-                                </div>
-                              </div>
-                            )}
-
-                          {/* Mostrar respuesta de texto para preguntas de texto/numéricas */}
-                          {questionType &&
-                            (questionType.key_name === "text" || questionType.key_name.startsWith("numbers_")) &&
-                            condition.text_answer && (
-                              <div className="mt-2">
-                                <Badge variant="outline" className="text-sm">
-                                  {condition.text_answer}
-                                </Badge>
-                              </div>
-                            )}
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Botón siguiente */}
-          <div className="flex justify-end">
-            <Button
-              onClick={() => setCurrentStep(2)}
-              disabled={filterConditions.length === 0 || filterConditions.some((c) => !isConditionComplete(c))}
-            >
-              {isSpanish ? "Siguiente" : "Next"}
-              <ChevronRight className="ml-2 h-4 w-4" />
-            </Button>
-          </div>
-        </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       )}
 
-      {/* Paso 2: Selección de campos de resultado */}
-      {currentStep === 2 && (
-        <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>{isSpanish ? "Seleccionar Campos de Resultado" : "Select Result Fields"}</CardTitle>
-              <CardDescription>
-                {isSpanish
-                  ? "Seleccione qué información desea obtener de los pacientes filtrados"
-                  : "Select what information you want to retrieve from the filtered patients"}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {/* Lista de preguntas disponibles */}
-              <div className="border rounded-lg p-4">
-                <h4 className="font-medium mb-3">{isSpanish ? "Preguntas Disponibles" : "Available Questions"}</h4>
-                <div className="space-y-2 max-h-60 overflow-y-auto">
-                  {getFilteredQuestions().map((question) => {
-                    const questionType = getQuestionType(question)
-                    return (
-                      <div
-                        key={question.id}
-                        className="flex items-center justify-between p-2 border rounded hover:bg-gray-50"
-                      >
-                        <div className="flex-1">
-                          <span className="text-sm font-medium">{isSpanish ? question.text_es : question.text_en}</span>
-                          <div className="text-xs text-gray-500 mt-1">
-                            {questionType
-                              ? isSpanish
-                                ? questionType.name_es
-                                : questionType.name_en
-                              : "Tipo desconocido"}
-                          </div>
-                        </div>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => addResultField(question.id)}
-                          disabled={resultFields.some((field) => field.question_id === question.id)}
-                        >
-                          <Plus className="h-4 w-4 mr-1" />
-                          {isSpanish ? "Agregar" : "Add"}
-                        </Button>
-                      </div>
-                    )
-                  })}
+      {/* Analysis Execution */}
+      {selectedForms.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>{t.executeAnalysis}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex gap-4">
+              <Button onClick={executeAnalysis} disabled={loading} className="flex-1">
+                {loading ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    {t.executing}
+                  </>
+                ) : (
+                  <>
+                    <BarChart3 className="w-4 h-4 mr-2" />
+                    {t.executeAnalysis}
+                  </>
+                )}
+              </Button>
+              {results && (
+                <Button variant="outline" onClick={exportResults}>
+                  <Download className="w-4 h-4 mr-2" />
+                  {t.exportResults}
+                </Button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Results */}
+      {results && (
+        <Card>
+          <CardHeader>
+            <CardTitle>{t.results}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {/* Summary */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="p-4 bg-blue-50 rounded-lg">
+                  <h3 className="font-semibold text-blue-900">{t.totalRecords}</h3>
+                  <p className="text-2xl font-bold text-blue-700">{results.summary?.total || 0}</p>
+                </div>
+                <div className="p-4 bg-green-50 rounded-lg">
+                  <h3 className="font-semibold text-green-900">{t.filteredRecords}</h3>
+                  <p className="text-2xl font-bold text-green-700">{results.summary?.filtered || 0}</p>
                 </div>
               </div>
 
-              {/* Campos de resultado agregados */}
-              {resultFields.length > 0 && (
-                <div className="space-y-4">
-                  <h4 className="font-medium">{isSpanish ? "Campos de Resultado" : "Result Fields"}</h4>
-                  {resultFields.map((field) => (
-                    <div key={field.id} className="border rounded-lg p-4 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <h5 className="font-medium">{field.question_text}</h5>
-                        <Button size="sm" variant="ghost" onClick={() => removeResultField(field.id)}>
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Botones de navegación */}
-          <div className="flex justify-between">
-            <Button variant="outline" onClick={() => setCurrentStep(1)}>
-              <ChevronLeft className="mr-2 h-4 w-4" />
-              {isSpanish ? "Anterior" : "Previous"}
-            </Button>
-            <Button onClick={executeQuery} disabled={resultFields.length === 0 || loadingStates.query}>
-              {loadingStates.query ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  <span>{isSpanish ? "Ejecutando..." : "Executing..."}</span>
-                </>
-              ) : (
-                <>
-                  <Search className="mr-2 h-4 w-4" />
-                  {isSpanish ? "Ejecutar Consulta" : "Execute Query"}
-                </>
-              )}
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {/* Paso 3: Resultados */}
-      {currentStep === 3 && (
-        <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>{isSpanish ? "Resultados del Análisis" : "Analysis Results"}</CardTitle>
-              <CardDescription>
-                {isSpanish
-                  ? "Aquí se muestran los resultados del análisis basado en los filtros seleccionados"
-                  : "Here are the results of the analysis based on the selected filters"}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {loadingStates.query ? (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="h-6 w-6 animate-spin mr-2" />
-                  <span>{isSpanish ? "Cargando resultados..." : "Loading results..."}</span>
+              {/* Data Preview */}
+              {results.data && results.data.length > 0 ? (
+                <div className="border rounded-lg overflow-hidden">
+                  <div className="bg-gray-50 px-4 py-2 border-b">
+                    <h3 className="font-semibold">{t.data}</h3>
+                  </div>
+                  <div className="p-4 max-h-96 overflow-auto">
+                    <pre className="text-sm bg-gray-100 p-4 rounded overflow-auto">
+                      {JSON.stringify(results.data.slice(0, 10), null, 2)}
+                    </pre>
+                    {results.data.length > 10 && (
+                      <p className="text-sm text-gray-500 mt-2">
+                        {language === "es"
+                          ? `Mostrando los primeros 10 de ${results.data.length} registros`
+                          : `Showing first 10 of ${results.data.length} records`}
+                      </p>
+                    )}
+                  </div>
                 </div>
               ) : (
-                <div className="space-y-4">
-                  {queryResults.length > 0 ? (
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          {Object.keys(queryResults[0]).map((header) => (
-                            <TableHead key={header}>{header}</TableHead>
-                          ))}
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {queryResults.map((result, index) => (
-                          <TableRow key={index}>
-                            {Object.values(result).map((value, colIndex) => (
-                              <TableCell key={colIndex}>{value}</TableCell>
-                            ))}
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  ) : (
-                    <div className="flex items-center justify-center py-8">
-                      <span>{isSpanish ? "No hay resultados disponibles." : "No results available."}</span>
-                    </div>
-                  )}
+                <div className="text-center py-8">
+                  <p className="text-gray-500">{t.noResults}</p>
                 </div>
               )}
-            </CardContent>
-          </Card>
-
-          {/* Botón de exportación */}
-          <div className="flex justify-between">
-            <Button variant="outline" onClick={() => setCurrentStep(2)}>
-              <ChevronLeft className="mr-2 h-4 w-4" />
-              {isSpanish ? "Anterior" : "Previous"}
-            </Button>
-            <div className="space-x-2">
-              <Button variant="outline" onClick={() => setCurrentStep(1)}>
-                {isSpanish ? "Nueva Consulta" : "New Query"}
-              </Button>
-              <Button onClick={exportToCSV} disabled={queryResults.length === 0}>
-                <FileSpreadsheet className="mr-2 h-4 w-4" />
-                {isSpanish ? "Exportar a CSV" : "Export to CSV"}
-              </Button>
             </div>
-          </div>
-        </div>
+          </CardContent>
+        </Card>
       )}
     </div>
   )

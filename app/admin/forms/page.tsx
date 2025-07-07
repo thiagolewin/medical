@@ -9,6 +9,7 @@ import { Plus, Search, Edit, Trash2, FileText, HelpCircle, Loader2 } from "lucid
 import Link from "next/link"
 import { formsApi, questionsApi } from "@/lib/api"
 import { useLanguage } from "@/lib/language-context"
+import { authUtils } from "@/lib/auth"
 
 interface Form {
   id: number
@@ -29,6 +30,9 @@ export default function FormsPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [isLoading, setIsLoading] = useState(true)
   const [loadingQuestions, setLoadingQuestions] = useState<Record<number, boolean>>({})
+
+  const isAdmin = authUtils.isAdmin()
+  const canEdit = authUtils.canEdit()
 
   useEffect(() => {
     const fetchForms = async () => {
@@ -85,6 +89,15 @@ export default function FormsPage() {
   }, [searchTerm, forms])
 
   const deleteForm = async (id: number) => {
+    if (!isAdmin) {
+      alert(
+        language === "es"
+          ? "No tienes permisos para eliminar formularios"
+          : "You don't have permission to delete forms",
+      )
+      return
+    }
+
     if (
       window.confirm(
         language === "es"
@@ -124,12 +137,14 @@ export default function FormsPage() {
             {language === "es" ? "Gestione los formularios del sistema médico" : "Manage medical system forms"}
           </p>
         </div>
-        <Link href="/admin/forms/new">
-          <Button>
-            <Plus className="mr-2 h-4 w-4" />
-            {language === "es" ? "Nuevo formulario" : "New form"}
-          </Button>
-        </Link>
+        {isAdmin && (
+          <Link href="/admin/forms/new">
+            <Button>
+              <Plus className="mr-2 h-4 w-4" />
+              {language === "es" ? "Nuevo formulario" : "New form"}
+            </Button>
+          </Link>
+        )}
       </div>
 
       <div className="flex items-center space-x-2">
@@ -157,12 +172,14 @@ export default function FormsPage() {
                 ? "No se encontraron formularios. Cree uno nuevo para comenzar."
                 : "No forms found. Create a new one to get started."}
             </p>
-            <Link href="/admin/forms/new">
-              <Button>
-                <Plus className="mr-2 h-4 w-4" />
-                {language === "es" ? "Crear primer formulario" : "Create first form"}
-              </Button>
-            </Link>
+            {isAdmin && (
+              <Link href="/admin/forms/new">
+                <Button>
+                  <Plus className="mr-2 h-4 w-4" />
+                  {language === "es" ? "Crear primer formulario" : "Create first form"}
+                </Button>
+              </Link>
+            )}
           </CardContent>
         </Card>
       ) : (
@@ -200,19 +217,23 @@ export default function FormsPage() {
                     {language === "es" ? "Creado:" : "Created:"} {new Date(form.created_at).toLocaleDateString()}
                   </div>
                   <div className="flex space-x-2">
-                    <Link href={`/admin/forms/${form.id}`}>
-                      <Button variant="outline" size="sm">
-                        <Edit className="h-4 w-4" />
+                    {canEdit && (
+                      <Link href={`/admin/forms/${form.id}`}>
+                        <Button variant="outline" size="sm">
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                      </Link>
+                    )}
+                    {isAdmin && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => deleteForm(form.id)}
+                        className="text-red-600 hover:text-red-700"
+                      >
+                        <Trash2 className="h-4 w-4" />
                       </Button>
-                    </Link>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => deleteForm(form.id)}
-                      className="text-red-600 hover:text-red-700"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                    )}
                   </div>
                 </div>
               </CardContent>
