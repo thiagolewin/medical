@@ -413,64 +413,6 @@ export const patientsApi = {
     }
   },
 
-  getPatient: async (id: number) => {
-    try {
-      const response = await fetch(`${config.API_BASE_URL}/patients/${id}`, {
-        method: "GET",
-        headers: getHeaders(),
-      })
-      return handleResponse(response)
-    } catch (error) {
-      console.error("Error obteniendo paciente:", error)
-      throw error
-    }
-  },
-
-  createPatient: async (patientData: {
-    first_name: string
-    last_name: string
-    email: string
-    phone: string
-    date_of_birth: string
-    nationality_id: number
-  }) => {
-    try {
-      const response = await fetch(`${config.API_BASE_URL}/patients`, {
-        method: "POST",
-        headers: getHeaders(),
-        body: JSON.stringify(patientData),
-      })
-      return handleResponse(response)
-    } catch (error) {
-      console.error("Error creando paciente:", error)
-      throw error
-    }
-  },
-
-  updatePatient: async (
-    id: number,
-    patientData: {
-      first_name: string
-      last_name: string
-      email: string
-      phone: string
-      date_of_birth: string
-      nationality_id: number
-    },
-  ) => {
-    try {
-      const response = await fetch(`${config.API_BASE_URL}/patients/${id}`, {
-        method: "PUT",
-        headers: getHeaders(),
-        body: JSON.stringify(patientData),
-      })
-      return handleResponse(response)
-    } catch (error) {
-      console.error("Error actualizando paciente:", error)
-      throw error
-    }
-  },
-
   deletePatient: async (id: number) => {
     try {
       const response = await fetch(`${config.API_BASE_URL}/patients/${id}`, {
@@ -485,11 +427,11 @@ export const patientsApi = {
   },
 }
 
-// Nationalities API - CORREGIDO: usar /patients/nationalities
+// Nationalities API
 export const nationalitiesApi = {
   getNationalities: async () => {
     try {
-      const response = await fetch(`${config.API_BASE_URL}/patients/nationalities`, {
+      const response = await fetch(`${config.API_BASE_URL}/nationalities`, {
         method: "GET",
         headers: getHeaders(),
       })

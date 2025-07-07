@@ -5,11 +5,10 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
-import { Plus, Search, Edit, Trash2, Calendar, FileText, Loader2 } from "lucide-react"
+import { Plus, Search, Edit, Trash2, FileText, Calendar, Loader2 } from "lucide-react"
 import Link from "next/link"
 import { protocolsApi } from "@/lib/api"
 import { useLanguage } from "@/lib/language-context"
-import { authUtils } from "@/lib/auth"
 
 interface Protocol {
   id: number
@@ -30,9 +29,6 @@ export default function ProtocolsPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [isLoading, setIsLoading] = useState(true)
   const [loadingForms, setLoadingForms] = useState<Record<number, boolean>>({})
-
-  const isAdmin = authUtils.isAdmin()
-  const canEdit = authUtils.canEdit()
 
   useEffect(() => {
     const fetchProtocols = async () => {
@@ -89,15 +85,6 @@ export default function ProtocolsPage() {
   }, [searchTerm, protocols])
 
   const deleteProtocol = async (id: number) => {
-    if (!isAdmin) {
-      alert(
-        language === "es"
-          ? "No tienes permisos para eliminar protocolos"
-          : "You don't have permission to delete protocols",
-      )
-      return
-    }
-
     if (
       window.confirm(
         language === "es"
@@ -139,14 +126,12 @@ export default function ProtocolsPage() {
             {language === "es" ? "Gestione los protocolos médicos del sistema" : "Manage medical system protocols"}
           </p>
         </div>
-        {isAdmin && (
-          <Link href="/admin/protocols/new">
-            <Button>
-              <Plus className="mr-2 h-4 w-4" />
-              {language === "es" ? "Nuevo protocolo" : "New protocol"}
-            </Button>
-          </Link>
-        )}
+        <Link href="/admin/protocols/new">
+          <Button>
+            <Plus className="mr-2 h-4 w-4" />
+            {language === "es" ? "Nuevo protocolo" : "New protocol"}
+          </Button>
+        </Link>
       </div>
 
       <div className="flex items-center space-x-2">
@@ -174,14 +159,12 @@ export default function ProtocolsPage() {
                 ? "No se encontraron protocolos. Cree uno nuevo para comenzar."
                 : "No protocols found. Create a new one to get started."}
             </p>
-            {isAdmin && (
-              <Link href="/admin/protocols/new">
-                <Button>
-                  <Plus className="mr-2 h-4 w-4" />
-                  {language === "es" ? "Crear primer protocolo" : "Create first protocol"}
-                </Button>
-              </Link>
-            )}
+            <Link href="/admin/protocols/new">
+              <Button>
+                <Plus className="mr-2 h-4 w-4" />
+                {language === "es" ? "Crear primer protocolo" : "Create first protocol"}
+              </Button>
+            </Link>
           </CardContent>
         </Card>
       ) : (
@@ -219,23 +202,19 @@ export default function ProtocolsPage() {
                     {language === "es" ? "Creado:" : "Created:"} {new Date(protocol.created_at).toLocaleDateString()}
                   </div>
                   <div className="flex space-x-2">
-                    {canEdit && (
-                      <Link href={`/admin/protocols/${protocol.id}`}>
-                        <Button variant="outline" size="sm">
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                      </Link>
-                    )}
-                    {isAdmin && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => deleteProtocol(protocol.id)}
-                        className="text-red-600 hover:text-red-700"
-                      >
-                        <Trash2 className="h-4 w-4" />
+                    <Link href={`/admin/protocols/${protocol.id}`}>
+                      <Button variant="outline" size="sm">
+                        <Edit className="h-4 w-4" />
                       </Button>
-                    )}
+                    </Link>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => deleteProtocol(protocol.id)}
+                      className="text-red-600 hover:text-red-700"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
                   </div>
                 </div>
               </CardContent>

@@ -5,277 +5,467 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
-import { BarChart3, Download, RefreshCw } from "lucide-react"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Loader2, Download, Search, Filter, BarChart3, HelpCircle } from "lucide-react"
 import { useLanguage } from "@/lib/language-context"
-import { protocolsApi, analysisApi } from "@/lib/api"
-import { authUtils } from "@/lib/auth"
+import { protocolsApi, questionsApi, questionTypesApi, analysisApi } from "@/lib/api"
 
 interface Protocol {
   id: number
-  name: string
-  description: string
-  forms?: Form[]
+  key_name: string
+  name_es: string
+  name_en: string
 }
 
 interface Form {
   id: number
-  name: string
-  description: string
+  key_name: string
+  name_es: string
+  name_en: string
+  protocol_id: number
 }
 
-interface AnalysisFilter {
-  type: string
-  field: string
+interface Question {
+  id: number
+  key_name: string
+  text_es: string
+  text_en: string
+  question_type_id: number
+  form_id: number
+  options?: Option[]
+}
+
+interface Option {
+  id: number
+  key_name: string
+  text_es: string
+  text_en: string
+  question_id: number
+}
+
+interface QuestionType {
+  id: number
+  key_name: string
+  name_es: string
+  name_en: string
+}
+
+interface FilterCondition {
+  questionId: number
   operator: string
-  value: any
+  value: string | string[]
+  customText?: string
 }
 
 interface AnalysisResult {
-  data: any[]
-  summary: {
-    total: number
-    filtered: number
-  }
+  patient_id: number
+  question_id: number
+  answer_text: string
+  form_instance_id: number
+  total: string
 }
 
 export default function AnalysisPage() {
   const { language } = useLanguage()
+
+  // Estados para datos
   const [protocols, setProtocols] = useState<Protocol[]>([])
-  const [selectedProtocol, setSelectedProtocol] = useState<string>("")
-  const [availableForms, setAvailableForms] = useState<Form[]>([])
-  const [selectedForms, setSelectedForms] = useState<number[]>([])
-  const [filters, setFilters] = useState<AnalysisFilter[]>([])
-  const [results, setResults] = useState<AnalysisResult | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [loadingProtocols, setLoadingProtocols] = useState(true)
+  const [forms, setForms] = useState<Form[]>([])
+  const [questions, setQuestions] = useState<Question[]>([])
+  const [questionTypes, setQuestionTypes] = useState<QuestionType[]>([])
+
+  // Estados para filtros
+  const [selectedProtocol, setSelectedProtocol] = useState<string>("all")
+  const [selectedForm, setSelectedForm] = useState<string>("all")
+  const [filterConditions, setFilterConditions] = useState<FilterCondition[]>([])
+  const [selectedResultFields, setSelectedResultFields] = useState<number[]>([])
+
+  // Estados para resultados
+  const [results, setResults] = useState<AnalysisResult[]>([])
+  const [isLoading, setIsLoading] = useState(false)
+  const [hasSearched, setHasSearched] = useState(false)
+
+  // Estados de carga
+  const [loadingStates, setLoadingStates] = useState({
+    protocols: false,
+    forms: false,
+    questions: false,
+    questionTypes: false,
+  })
+
+  // Estados de error
   const [error, setError] = useState<string>("")
-  const [success, setSuccess] = useState<string>("")
 
-  const canViewData = authUtils.canViewData()
-
+  // Textos traducidos
   const t = {
     title: language === "es" ? "Análisis de Datos" : "Data Analysis",
     subtitle:
       language === "es"
-        ? "Analiza los datos recopilados de formularios y protocolos"
-        : "Analyze data collected from forms and protocols",
-    selectProtocol: language === "es" ? "Seleccionar Protocolo" : "Select Protocol",
-    selectForms: language === "es" ? "Seleccionar Formularios" : "Select Forms",
-    filters: language === "es" ? "Filtros" : "Filters",
-    addFilter: language === "es" ? "Agregar Filtro" : "Add Filter",
-    executeAnalysis: language === "es" ? "Ejecutar Análisis" : "Execute Analysis",
-    exportResults: language === "es" ? "Exportar Resultados" : "Export Results",
-    results: language === "es" ? "Resultados" : "Results",
-    noProtocols: language === "es" ? "No hay protocolos disponibles" : "No protocols available",
-    noForms:
-      language === "es" ? "No hay formularios disponibles para este protocolo" : "No forms available for this protocol",
-    selectProtocolFirst: language === "es" ? "Selecciona un protocolo primero" : "Select a protocol first",
-    selectFormsFirst: language === "es" ? "Selecciona al menos un formulario" : "Select at least one form",
-    loadingProtocols: language === "es" ? "Cargando protocolos..." : "Loading protocols...",
-    loadingForms: language === "es" ? "Cargando formularios..." : "Loading forms...",
-    executing: language === "es" ? "Ejecutando análisis..." : "Executing analysis...",
-    errorLoadingProtocols: language === "es" ? "Error al cargar protocolos" : "Error loading protocols",
-    errorLoadingForms: language === "es" ? "Error al cargar formularios" : "Error loading forms",
-    errorExecutingAnalysis: language === "es" ? "Error al ejecutar análisis" : "Error executing analysis",
-    analysisCompleted: language === "es" ? "Análisis completado exitosamente" : "Analysis completed successfully",
-    totalRecords: language === "es" ? "Total de registros" : "Total records",
-    filteredRecords: language === "es" ? "Registros filtrados" : "Filtered records",
-    noResults: language === "es" ? "No se encontraron resultados" : "No results found",
-    protocol: language === "es" ? "Protocolo" : "Protocol",
-    form: language === "es" ? "Formulario" : "Form",
+        ? "Analice y filtre los datos de respuestas de pacientes. Los filtros y campos son opcionales."
+        : "Analyze and filter patient response data. Filters and fields are optional.",
+    flexibleQueries: language === "es" ? "Consultas flexibles:" : "Flexible queries:",
+    flexibleQueriesDesc:
+      language === "es"
+        ? "Puede ejecutar consultas sin filtros ni campos específicos para obtener todos los datos disponibles."
+        : "You can execute queries without filters or specific fields to get all available data.",
+    dataSelection: language === "es" ? "Selección de Datos" : "Data Selection",
+    protocolOptional: language === "es" ? "Protocolo (Opcional)" : "Protocol (Optional)",
+    formOptional: language === "es" ? "Formulario (Opcional)" : "Form (Optional)",
+    selectProtocol: language === "es" ? "Seleccionar protocolo..." : "Select protocol...",
+    selectForm: language === "es" ? "Seleccionar formulario..." : "Select form...",
+    allProtocols: language === "es" ? "Todos los protocolos" : "All protocols",
     allForms: language === "es" ? "Todos los formularios" : "All forms",
-    refresh: language === "es" ? "Actualizar" : "Refresh",
-    clear: language === "es" ? "Limpiar" : "Clear",
-    summary: language === "es" ? "Resumen" : "Summary",
-    data: language === "es" ? "Datos" : "Data",
+    responseFilters: language === "es" ? "Filtros de Respuestas (Opcional)" : "Response Filters (Optional)",
+    addFilter: language === "es" ? "Agregar Filtro" : "Add Filter",
+    noFiltersConfigured:
+      language === "es"
+        ? "No hay filtros configurados. Los filtros son opcionales - puede ejecutar consultas sin filtros."
+        : "No filters configured. Filters are optional - you can run queries without filters.",
+    filter: language === "es" ? "Filtro" : "Filter",
+    remove: language === "es" ? "Eliminar" : "Remove",
+    question: language === "es" ? "Pregunta" : "Question",
+    operator: language === "es" ? "Operador" : "Operator",
+    value: language === "es" ? "Valor" : "Value",
+    equals: language === "es" ? "Igual a" : "Equals",
+    contains: language === "es" ? "Contiene" : "Contains",
+    greaterThan: language === "es" ? "Mayor que" : "Greater than",
+    lessThan: language === "es" ? "Menor que" : "Less than",
+    select: language === "es" ? "Seleccionar..." : "Select...",
+    specify: language === "es" ? "Especificar..." : "Specify...",
+    notSpecified: language === "es" ? "Sin especificar" : "Not specified",
+    enterValue: language === "es" ? "Ingrese valor..." : "Enter value...",
+    type: language === "es" ? "Tipo: " : "Type: ",
+    resultFields: language === "es" ? "Campos de Resultado (Opcional)" : "Result Fields (Optional)",
+    selectFormToSeeQuestions:
+      language === "es"
+        ? "Seleccione un formulario para ver las preguntas disponibles. Los campos son opcionales."
+        : "Select a form to see available questions. Fields are optional.",
+    selectQuestionsForResults:
+      language === "es"
+        ? "Seleccione las preguntas que desea incluir en los resultados. Si no selecciona ninguna, se mostrarán todas."
+        : "Select the questions you want to include in the results. If none selected, all will be shown.",
+    analyzing: language === "es" ? "Analizando..." : "Analyzing...",
+    executeAnalysis: language === "es" ? "Ejecutar Análisis" : "Execute Analysis",
+    analysisResults: language === "es" ? "Resultados del Análisis" : "Analysis Results",
+    exportCSV: language === "es" ? "Exportar CSV" : "Export CSV",
+    noResultsFound:
+      language === "es"
+        ? "No se encontraron resultados para los criterios especificados."
+        : "No results found for the specified criteria.",
+    records: language === "es" ? "Registros" : "Records",
+    uniquePatients: language === "es" ? "Pacientes únicos" : "Unique patients",
+    uniqueQuestions: language === "es" ? "Preguntas únicas" : "Unique questions",
+    totalResponses: language === "es" ? "Total respuestas" : "Total responses",
+    patientId: language === "es" ? "ID Paciente" : "Patient ID",
+    answer: language === "es" ? "Respuesta" : "Answer",
+    instanceId: language === "es" ? "ID Instancia" : "Instance ID",
+    total: language === "es" ? "Total" : "Total",
+    loading: language === "es" ? "Cargando..." : "Loading...",
+    errorExecutingAnalysis: language === "es" ? "Error al ejecutar el análisis" : "Error executing analysis",
+    errorLoadingData: language === "es" ? "Error al cargar datos" : "Error loading data",
   }
 
+  // Cargar datos iniciales
   useEffect(() => {
-    loadProtocols()
+    loadInitialData()
   }, [])
 
+  const loadInitialData = async () => {
+    try {
+      setError("")
+
+      // Cargar protocolos
+      setLoadingStates((prev) => ({ ...prev, protocols: true }))
+      console.log("Cargando protocolos...")
+      const protocolsData = await protocolsApi.getProtocols()
+      console.log("Protocolos cargados:", protocolsData)
+      setProtocols(protocolsData)
+
+      // Cargar tipos de pregunta
+      setLoadingStates((prev) => ({ ...prev, questionTypes: true }))
+      console.log("Cargando tipos de pregunta...")
+      const typesData = await questionTypesApi.getQuestionTypes()
+      console.log("Tipos de pregunta cargados:", typesData)
+      setQuestionTypes(typesData)
+    } catch (error) {
+      console.error("Error loading initial data:", error)
+      setError(`${t.errorLoadingData}: ${error}`)
+    } finally {
+      setLoadingStates((prev) => ({ ...prev, protocols: false, questionTypes: false }))
+    }
+  }
+
+  // Cargar formularios cuando se selecciona un protocolo
   useEffect(() => {
-    if (selectedProtocol) {
-      loadProtocolForms(Number.parseInt(selectedProtocol))
+    if (selectedProtocol !== "all") {
+      loadForms(Number(selectedProtocol))
     } else {
-      setAvailableForms([])
-      setSelectedForms([])
+      setForms([])
+      setSelectedForm("all")
     }
   }, [selectedProtocol])
 
-  const loadProtocols = async () => {
-    try {
-      setLoadingProtocols(true)
-      setError("")
-      console.log("=== Cargando protocolos ===")
-
-      const data = await protocolsApi.getProtocols()
-      console.log("Protocolos obtenidos:", data)
-
-      // Asegurar que data es un array
-      const protocolsArray = Array.isArray(data) ? data : []
-      setProtocols(protocolsArray)
-
-      if (protocolsArray.length === 0) {
-        console.log("No se encontraron protocolos")
-      }
-    } catch (err) {
-      console.error("Error cargando protocolos:", err)
-      setError(`${t.errorLoadingProtocols}: ${err instanceof Error ? err.message : String(err)}`)
-      setProtocols([]) // Asegurar que protocols sea un array vacío en caso de error
-    } finally {
-      setLoadingProtocols(false)
-    }
-  }
-
-  const loadProtocolForms = async (protocolId: number) => {
-    try {
-      setLoading(true)
-      setError("")
-      console.log("=== Cargando formularios del protocolo ===", protocolId)
-
-      const data = await protocolsApi.getProtocolForms(protocolId)
-      console.log("Formularios del protocolo obtenidos:", data)
-
-      // Transformar los datos si vienen en formato diferente
-      let forms: Form[] = []
-      if (Array.isArray(data)) {
-        forms = data.map((item: any) => ({
-          id: item.form_id || item.id,
-          name: item.form_name || item.name || `Form ${item.form_id || item.id}`,
-          description: item.form_description || item.description || "",
-        }))
-      } else if (data && typeof data === "object") {
-        // Si data no es array pero es un objeto, intentar extraer forms
-        const formsData = data.forms || data.data || []
-        if (Array.isArray(formsData)) {
-          forms = formsData.map((item: any) => ({
-            id: item.form_id || item.id,
-            name: item.form_name || item.name || `Form ${item.form_id || item.id}`,
-            description: item.form_description || item.description || "",
-          }))
-        }
-      }
-
-      console.log("Formularios transformados:", forms)
-      setAvailableForms(forms)
-      setSelectedForms([])
-
-      if (forms.length === 0) {
-        console.log("No se encontraron formularios para este protocolo")
-      }
-    } catch (err) {
-      console.error("Error cargando formularios del protocolo:", err)
-      setError(`${t.errorLoadingForms}: ${err}`)
-      setAvailableForms([])
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleFormSelection = (formId: number, checked: boolean) => {
-    if (checked) {
-      setSelectedForms([...selectedForms, formId])
+  // Cargar preguntas cuando se selecciona un formulario
+  useEffect(() => {
+    if (selectedForm !== "all") {
+      loadQuestions(Number(selectedForm))
     } else {
-      setSelectedForms(selectedForms.filter((id) => id !== formId))
+      setQuestions([])
+      setFilterConditions([])
+      setSelectedResultFields([])
+    }
+  }, [selectedForm])
+
+  const loadForms = async (protocolId: number) => {
+    try {
+      setLoadingStates((prev) => ({ ...prev, forms: true }))
+      setError("")
+      console.log("Cargando formularios para protocolo:", protocolId)
+      const formsData = await protocolsApi.getProtocolForms(protocolId)
+      console.log("Formularios cargados:", formsData)
+
+      // Transform protocol forms to regular forms format
+      const transformedForms = formsData.map((pf: any) => ({
+        id: pf.form_id,
+        key_name: pf.form_key || `form_${pf.form_id}`,
+        name_es: pf.form_name_es,
+        name_en: pf.form_name_en,
+        protocol_id: pf.protocol_id,
+      }))
+      setForms(transformedForms)
+    } catch (error) {
+      console.error("Error loading forms:", error)
+      setError(`${t.errorLoadingData} formularios: ${error}`)
+      setForms([])
+    } finally {
+      setLoadingStates((prev) => ({ ...prev, forms: false }))
     }
   }
 
-  const handleSelectAllForms = (checked: boolean) => {
-    if (checked) {
-      setSelectedForms(availableForms.map((form) => form.id))
-    } else {
-      setSelectedForms([])
+  const loadQuestions = async (formId: number) => {
+    try {
+      setLoadingStates((prev) => ({ ...prev, questions: true }))
+      setError("")
+      console.log("Cargando preguntas para formulario:", formId)
+      const questionsData = await questionsApi.getQuestionsByForm(formId)
+      console.log("Preguntas cargadas:", questionsData)
+
+      // Cargar opciones para cada pregunta
+      const questionsWithOptions = await Promise.all(
+        questionsData.map(async (question) => {
+          try {
+            const options = await questionsApi.getQuestionOptions(question.id)
+            return { ...question, options }
+          } catch (error) {
+            console.error(`Error loading options for question ${question.id}:`, error)
+            return { ...question, options: [] }
+          }
+        }),
+      )
+
+      setQuestions(questionsWithOptions)
+    } catch (error) {
+      console.error("Error loading questions:", error)
+      setError(`${t.errorLoadingData} preguntas: ${error}`)
+    } finally {
+      setLoadingStates((prev) => ({ ...prev, questions: false }))
     }
+  }
+
+  const addFilterCondition = () => {
+    if (questions.length === 0) return
+
+    const newCondition: FilterCondition = {
+      questionId: questions[0].id,
+      operator: "equals",
+      value: "",
+    }
+
+    setFilterConditions([...filterConditions, newCondition])
+  }
+
+  const updateFilterCondition = (index: number, field: keyof FilterCondition, value: any) => {
+    const updated = [...filterConditions]
+    updated[index] = { ...updated[index], [field]: value }
+
+    // Si cambia la pregunta, resetear el valor
+    if (field === "questionId") {
+      updated[index].value = ""
+      updated[index].customText = ""
+    }
+
+    setFilterConditions(updated)
+  }
+
+  const removeFilterCondition = (index: number) => {
+    setFilterConditions(filterConditions.filter((_, i) => i !== index))
+  }
+
+  const toggleResultField = (questionId: number) => {
+    setSelectedResultFields((prev) =>
+      prev.includes(questionId) ? prev.filter((id) => id !== questionId) : [...prev, questionId],
+    )
+  }
+
+  const getQuestionType = (questionTypeId: number) => {
+    return questionTypes.find((type) => type.id === questionTypeId)
+  }
+
+  const isNumericQuestion = (questionTypeId: number) => {
+    const type = getQuestionType(questionTypeId)
+    return type?.key_name.startsWith("numbers")
+  }
+
+  const hasOptions = (questionTypeId: number) => {
+    const type = getQuestionType(questionTypeId)
+    return (
+      type &&
+      (type.key_name === "optionandtext" ||
+        type.key_name === "optionmultipleandtext" ||
+        type.key_name === "optiondropdownandtext")
+    )
+  }
+
+  const isMultipleChoice = (questionTypeId: number) => {
+    const type = getQuestionType(questionTypeId)
+    return type?.key_name === "optionmultipleandtext"
+  }
+
+  // Detectar si una opción es "Otra"
+  const isOtherOption = (option: Option) => {
+    return option.key_name === "other" || option.key_name.startsWith("otra_")
   }
 
   const executeAnalysis = async () => {
-    if (!selectedProtocol) {
-      setError(t.selectProtocolFirst)
-      return
-    }
-
-    if (selectedForms.length === 0) {
-      setError(t.selectFormsFirst)
-      return
-    }
-
     try {
-      setLoading(true)
+      setIsLoading(true)
+      setHasSearched(true)
       setError("")
-      setSuccess("")
-      console.log("=== Ejecutando análisis ===")
-      console.log("Protocolo seleccionado:", selectedProtocol)
-      console.log("Formularios seleccionados:", selectedForms)
-      console.log("Filtros:", filters)
+
+      // Preparar payload según el formato esperado por el backend
+      const filtros: any[] = []
+
+      filterConditions.forEach((condition) => {
+        const question = questions.find((q) => q.id === condition.questionId)
+
+        if (Array.isArray(condition.value)) {
+          // Múltiples valores
+          condition.value.forEach((val) => {
+            const option = question?.options?.find((opt) => opt.id === Number(val))
+            let answerText = val
+
+            if (option) {
+              if (isOtherOption(option) && condition.customText) {
+                answerText = condition.customText
+              } else {
+                answerText = language === "es" ? option.text_es : option.text_en
+              }
+            }
+
+            filtros.push({
+              idForm: question?.form_id || 0,
+              idProtocolo: selectedProtocol !== "all" ? Number(selectedProtocol) : 0,
+              idPregunta: condition.questionId,
+              anwerText: answerText,
+            })
+          })
+        } else {
+          // Valor único
+          const option = question?.options?.find((opt) => opt.id === Number(condition.value))
+          let answerText = condition.value as string
+
+          if (option) {
+            if (isOtherOption(option) && condition.customText) {
+              answerText = condition.customText
+            } else {
+              answerText = language === "es" ? option.text_es : option.text_en
+            }
+          }
+
+          filtros.push({
+            idForm: question?.form_id || 0,
+            idProtocolo: selectedProtocol !== "all" ? Number(selectedProtocol) : 0,
+            idPregunta: condition.questionId,
+            anwerText: answerText,
+          })
+        }
+      })
+
+      // Si no hay campos de resultado seleccionados, enviar array vacío
+      const traer = selectedResultFields.length > 0 ? selectedResultFields : []
 
       const payload = {
-        filtros: filters.map((filter) => ({
-          type: filter.type,
-          field: filter.field,
-          operator: filter.operator,
-          value: filter.value,
-        })),
-        traer: selectedForms,
+        filtros: filtros, // Array de filtros (puede estar vacío)
+        traer: traer, // Array de question IDs (puede estar vacío)
       }
 
-      console.log("Payload del análisis:", payload)
+      console.log("Executing analysis with payload:", payload)
 
-      const data = await analysisApi.executeAnalysis(payload)
-      console.log("Resultados del análisis:", data)
-
-      setResults(data)
-      setSuccess(t.analysisCompleted)
-    } catch (err) {
-      console.error("Error ejecutando análisis:", err)
-      setError(`${t.errorExecutingAnalysis}: ${err}`)
+      const analysisResults = await analysisApi.executeAnalysis(payload)
+      setResults(analysisResults || [])
+    } catch (error) {
+      console.error("Error executing analysis:", error)
+      setError(`${t.errorExecutingAnalysis}: ${error}`)
     } finally {
-      setLoading(false)
+      setIsLoading(false)
     }
   }
 
-  const clearAnalysis = () => {
-    setSelectedProtocol("")
-    setAvailableForms([])
-    setSelectedForms([])
-    setFilters([])
-    setResults(null)
-    setError("")
-    setSuccess("")
+  const exportToCSV = () => {
+    if (results.length === 0) return
+
+    // Crear headers
+    const headers = [
+      t.patientId,
+      language === "es" ? "ID Pregunta" : "Question ID",
+      t.question,
+      t.answer,
+      t.instanceId,
+      t.total,
+    ]
+
+    // Crear filas con información enriquecida
+    const rows = results.map((result) => {
+      const question = questions.find((q) => q.id === result.question_id)
+      const questionText = question
+        ? language === "es"
+          ? question.text_es
+          : question.text_en
+        : `Question ${result.question_id}`
+
+      return [
+        result.patient_id,
+        result.question_id,
+        `"${questionText}"`,
+        `"${result.answer_text}"`,
+        result.form_instance_id,
+        result.total,
+      ]
+    })
+
+    // Crear CSV
+    const csvContent = [headers, ...rows].map((row) => row.join(",")).join("\n")
+
+    // Descargar
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
+    const link = document.createElement("a")
+    const url = URL.createObjectURL(blob)
+    link.setAttribute("href", url)
+    link.setAttribute("download", `analysis_results_${new Date().toISOString().split("T")[0]}.csv`)
+    link.style.visibility = "hidden"
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
   }
 
-  const exportResults = () => {
-    if (!results) return
-
-    const dataStr = JSON.stringify(results, null, 2)
-    const dataUri = "data:application/json;charset=utf-8," + encodeURIComponent(dataStr)
-
-    const exportFileDefaultName = `analysis_results_${new Date().toISOString().split("T")[0]}.json`
-
-    const linkElement = document.createElement("a")
-    linkElement.setAttribute("href", dataUri)
-    linkElement.setAttribute("download", exportFileDefaultName)
-    linkElement.click()
-  }
-
-  if (!canViewData) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">
-            {language === "es" ? "Acceso Denegado" : "Access Denied"}
-          </h1>
-          <p className="text-gray-600">
-            {language === "es"
-              ? "No tienes permisos para ver esta página."
-              : "You don't have permission to view this page."}
-          </p>
-        </div>
-      </div>
-    )
-  }
+  // Calcular estadísticas
+  const uniquePatients = new Set(results.map((r) => r.patient_id)).size
+  const uniqueQuestions = new Set(results.map((r) => r.question_id)).size
+  const totalResponses = results.reduce((sum, r) => sum + Number(r.total), 0)
 
   return (
     <div className="container mx-auto p-6 space-y-6">
@@ -287,16 +477,6 @@ export default function AnalysisPage() {
           </h1>
           <p className="text-gray-600 mt-2">{t.subtitle}</p>
         </div>
-
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={loadProtocols} disabled={loadingProtocols}>
-            <RefreshCw className={`w-4 h-4 mr-2 ${loadingProtocols ? "animate-spin" : ""}`} />
-            {t.refresh}
-          </Button>
-          <Button variant="outline" onClick={clearAnalysis}>
-            {t.clear}
-          </Button>
-        </div>
       </div>
 
       {error && (
@@ -305,177 +485,441 @@ export default function AnalysisPage() {
         </Alert>
       )}
 
-      {success && (
-        <Alert>
-          <AlertDescription>{success}</AlertDescription>
-        </Alert>
-      )}
+      {/* Información sobre consultas flexibles */}
+      <Card className="bg-blue-50 border-blue-200">
+        <CardContent className="pt-6">
+          <div className="flex items-start space-x-3">
+            <BarChart3 className="h-5 w-5 text-blue-600 mt-0.5" />
+            <div className="text-sm text-blue-800">
+              <p className="font-medium mb-1">{t.flexibleQueries}</p>
+              <p>{t.flexibleQueriesDesc}</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
-      {/* Protocol Selection */}
+      {/* Selección de Protocolo y Formulario */}
       <Card>
         <CardHeader>
-          <CardTitle>{t.selectProtocol}</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <Filter className="w-5 h-5" />
+            {t.dataSelection}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <Label>{t.protocolOptional}</Label>
+              {loadingStates.protocols ? (
+                <div className="h-10 bg-gray-100 rounded animate-pulse" />
+              ) : (
+                <Select value={selectedProtocol} onValueChange={setSelectedProtocol}>
+                  <SelectTrigger>
+                    <SelectValue placeholder={t.selectProtocol} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">{t.allProtocols}</SelectItem>
+                    {protocols.map((protocol) => (
+                      <SelectItem key={protocol.id} value={protocol.id.toString()}>
+                        {language === "es" ? protocol.name_es : protocol.name_en}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
+
+            <div>
+              <Label>{t.formOptional}</Label>
+              {loadingStates.forms ? (
+                <div className="h-10 bg-gray-100 rounded animate-pulse" />
+              ) : (
+                <Select value={selectedForm} onValueChange={setSelectedForm} disabled={selectedProtocol === "all"}>
+                  <SelectTrigger>
+                    <SelectValue placeholder={t.selectForm} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">{t.allForms}</SelectItem>
+                    {forms.map((form) => (
+                      <SelectItem key={form.id} value={form.id.toString()}>
+                        {language === "es" ? form.name_es : form.name_en}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Filtros de Preguntas */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center justify-between">
+            <span className="flex items-center gap-2">
+              <Search className="w-5 h-5" />
+              {t.responseFilters}
+            </span>
+            <Button onClick={addFilterCondition} size="sm" disabled={questions.length === 0}>
+              {t.addFilter}
+            </Button>
+          </CardTitle>
         </CardHeader>
         <CardContent>
-          {loadingProtocols ? (
-            <div className="flex items-center justify-center py-8">
-              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
-              <span className="ml-2">{t.loadingProtocols}</span>
+          {loadingStates.questions ? (
+            <div className="space-y-3">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="h-16 bg-gray-100 rounded animate-pulse" />
+              ))}
             </div>
-          ) : protocols.length === 0 ? (
-            <div className="text-center py-8">
-              <p className="text-gray-500">{t.noProtocols}</p>
-            </div>
+          ) : filterConditions.length === 0 ? (
+            <p className="text-gray-500 text-center py-8">{t.noFiltersConfigured}</p>
           ) : (
-            <Select value={selectedProtocol} onValueChange={setSelectedProtocol}>
-              <SelectTrigger>
-                <SelectValue placeholder={t.selectProtocol} />
-              </SelectTrigger>
-              <SelectContent>
-                {protocols.map((protocol) => (
-                  <SelectItem key={protocol.id} value={protocol.id.toString()}>
-                    {protocol.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="space-y-4">
+              {filterConditions.map((condition, index) => {
+                const question = questions.find((q) => q.id === condition.questionId)
+                const questionType = question ? getQuestionType(question.question_type_id) : null
+
+                return (
+                  <div key={index} className="border rounded-lg p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium">
+                        {t.filter} {index + 1}
+                      </span>
+                      <Button variant="outline" size="sm" onClick={() => removeFilterCondition(index)}>
+                        {t.remove}
+                      </Button>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      {/* Selección de pregunta */}
+                      <div>
+                        <Label className="text-sm">{t.question}</Label>
+                        <Select
+                          value={condition.questionId.toString()}
+                          onValueChange={(value) => updateFilterCondition(index, "questionId", Number(value))}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {questions.map((q) => (
+                              <SelectItem key={q.id} value={q.id.toString()}>
+                                {language === "es" ? q.text_es : q.text_en}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {/* Operador */}
+                      <div>
+                        <Label className="text-sm">{t.operator}</Label>
+                        <Select
+                          value={condition.operator}
+                          onValueChange={(value) => updateFilterCondition(index, "operator", value)}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="equals">{t.equals}</SelectItem>
+                            <SelectItem value="contains">{t.contains}</SelectItem>
+                            {isNumericQuestion(question?.question_type_id || 0) && (
+                              <>
+                                <SelectItem value="greater_than">{t.greaterThan}</SelectItem>
+                                <SelectItem value="less_than">{t.lessThan}</SelectItem>
+                              </>
+                            )}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {/* Valor */}
+                      <div>
+                        <Label className="text-sm">{t.value}</Label>
+                        {question && hasOptions(question.question_type_id) ? (
+                          <div className="space-y-2">
+                            {isMultipleChoice(question.question_type_id) ? (
+                              // Múltiple selección
+                              <div className="border rounded p-2 max-h-32 overflow-y-auto">
+                                {question.options?.map((option) => {
+                                  const isSelected =
+                                    Array.isArray(condition.value) && condition.value.includes(option.id.toString())
+                                  const isOther = isOtherOption(option)
+
+                                  return (
+                                    <div key={option.id} className="space-y-2">
+                                      <div className="flex items-center space-x-2">
+                                        <Checkbox
+                                          checked={isSelected}
+                                          onCheckedChange={(checked) => {
+                                            const currentValues = Array.isArray(condition.value) ? condition.value : []
+                                            const newValues = checked
+                                              ? [...currentValues, option.id.toString()]
+                                              : currentValues.filter((v) => v !== option.id.toString())
+                                            updateFilterCondition(index, "value", newValues)
+
+                                            // Si se deselecciona una opción "Otra", limpiar el texto
+                                            if (!checked && isOther) {
+                                              updateFilterCondition(index, "customText", "")
+                                            }
+                                          }}
+                                        />
+                                        <span className="text-sm">
+                                          {language === "es" ? option.text_es : option.text_en}
+                                        </span>
+                                        {isOther && isSelected && (
+                                          <Badge variant="secondary" className="text-xs">
+                                            {condition.customText || t.notSpecified}
+                                          </Badge>
+                                        )}
+                                      </div>
+
+                                      {/* Input para "Otra" */}
+                                      {isOther && isSelected && (
+                                        <div className="ml-6">
+                                          <Input
+                                            placeholder={t.specify}
+                                            value={condition.customText || ""}
+                                            onChange={(e) => updateFilterCondition(index, "customText", e.target.value)}
+                                            className="text-sm"
+                                          />
+                                        </div>
+                                      )}
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            ) : (
+                              // Selección única
+                              <div className="space-y-2">
+                                <Select
+                                  value={condition.value as string}
+                                  onValueChange={(value) => {
+                                    updateFilterCondition(index, "value", value)
+                                    // Si no es una opción "Otra", limpiar el texto personalizado
+                                    const selectedOption = question.options?.find((opt) => opt.id.toString() === value)
+                                    if (!selectedOption || !isOtherOption(selectedOption)) {
+                                      updateFilterCondition(index, "customText", "")
+                                    }
+                                  }}
+                                >
+                                  <SelectTrigger>
+                                    <SelectValue placeholder={t.select} />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {question.options?.map((option) => (
+                                      <SelectItem key={option.id} value={option.id.toString()}>
+                                        {language === "es" ? option.text_es : option.text_en}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+
+                                {/* Input para "Otra" en selección única */}
+                                {(() => {
+                                  const selectedOption = question.options?.find(
+                                    (opt) => opt.id.toString() === condition.value,
+                                  )
+                                  return (
+                                    selectedOption &&
+                                    isOtherOption(selectedOption) && (
+                                      <div className="mt-2">
+                                        <Input
+                                          placeholder={t.specify}
+                                          value={condition.customText || ""}
+                                          onChange={(e) => updateFilterCondition(index, "customText", e.target.value)}
+                                          className="text-sm"
+                                        />
+                                        {condition.customText && (
+                                          <Badge variant="secondary" className="text-xs mt-1">
+                                            {condition.customText}
+                                          </Badge>
+                                        )}
+                                      </div>
+                                    )
+                                  )
+                                })()}
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          // Input de texto para preguntas sin opciones
+                          <Input
+                            value={condition.value as string}
+                            onChange={(e) => updateFilterCondition(index, "value", e.target.value)}
+                            placeholder={t.enterValue}
+                          />
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Mostrar tipo de pregunta */}
+                    {questionType && (
+                      <div className="text-xs text-gray-500">
+                        {t.type}
+                        {language === "es" ? questionType.name_es : questionType.name_en}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
           )}
         </CardContent>
       </Card>
 
-      {/* Forms Selection */}
-      {selectedProtocol && (
-        <Card>
-          <CardHeader>
-            <CardTitle>{t.selectForms}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <div className="flex items-center justify-center py-8">
-                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
-                <span className="ml-2">{t.loadingForms}</span>
+      {/* Campos de Resultado */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <HelpCircle className="w-5 h-5" />
+            {t.resultFields}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {loadingStates.questions ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {[1, 2, 3, 4, 5, 6].map((i) => (
+                <div key={i} className="h-8 bg-gray-100 rounded animate-pulse" />
+              ))}
+            </div>
+          ) : questions.length === 0 ? (
+            <p className="text-gray-500 text-center py-8">{t.selectFormToSeeQuestions}</p>
+          ) : (
+            <div className="space-y-4">
+              <p className="text-sm text-gray-600">{t.selectQuestionsForResults}</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                {questions.map((question) => (
+                  <div key={question.id} className="flex items-center space-x-2">
+                    <Checkbox
+                      checked={selectedResultFields.includes(question.id)}
+                      onCheckedChange={() => toggleResultField(question.id)}
+                    />
+                    <span className="text-sm">{language === "es" ? question.text_es : question.text_en}</span>
+                  </div>
+                ))}
               </div>
-            ) : availableForms.length === 0 ? (
-              <div className="text-center py-8">
-                <p className="text-gray-500">{t.noForms}</p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="select-all"
-                    checked={selectedForms.length === availableForms.length}
-                    onCheckedChange={handleSelectAllForms}
-                  />
-                  <label htmlFor="select-all" className="text-sm font-medium">
-                    {t.allForms}
-                  </label>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {availableForms.map((form) => (
-                    <div key={form.id} className="flex items-center space-x-2 p-3 border rounded-lg">
-                      <Checkbox
-                        id={`form-${form.id}`}
-                        checked={selectedForms.includes(form.id)}
-                        onCheckedChange={(checked) => handleFormSelection(form.id, checked as boolean)}
-                      />
-                      <div className="flex-1">
-                        <label htmlFor={`form-${form.id}`} className="text-sm font-medium cursor-pointer">
-                          {form.name}
-                        </label>
-                        {form.description && <p className="text-xs text-gray-500 mt-1">{form.description}</p>}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <div className="flex items-center gap-2">
-                  <Badge variant="outline">
-                    {selectedForms.length} / {availableForms.length} {language === "es" ? "seleccionados" : "selected"}
-                  </Badge>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
-      {/* Analysis Execution */}
-      {selectedForms.length > 0 && (
+      {/* Botón de Análisis */}
+      <div className="flex justify-center">
+        <Button onClick={executeAnalysis} disabled={isLoading} size="lg" className="min-w-48">
+          {isLoading ? (
+            <>
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              {t.analyzing}
+            </>
+          ) : (
+            <>
+              <Search className="w-4 h-4 mr-2" />
+              {t.executeAnalysis}
+            </>
+          )}
+        </Button>
+      </div>
+
+      {/* Resultados */}
+      {hasSearched && (
         <Card>
           <CardHeader>
-            <CardTitle>{t.executeAnalysis}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex gap-4">
-              <Button onClick={executeAnalysis} disabled={loading} className="flex-1">
-                {loading ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                    {t.executing}
-                  </>
-                ) : (
-                  <>
-                    <BarChart3 className="w-4 h-4 mr-2" />
-                    {t.executeAnalysis}
-                  </>
-                )}
-              </Button>
-              {results && (
-                <Button variant="outline" onClick={exportResults}>
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <BarChart3 className="w-5 h-5" />
+                {t.analysisResults}
+              </CardTitle>
+              {results.length > 0 && (
+                <Button onClick={exportToCSV} variant="outline" size="sm">
                   <Download className="w-4 h-4 mr-2" />
-                  {t.exportResults}
+                  {t.exportCSV}
                 </Button>
               )}
             </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Results */}
-      {results && (
-        <Card>
-          <CardHeader>
-            <CardTitle>{t.results}</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              {/* Summary */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="p-4 bg-blue-50 rounded-lg">
-                  <h3 className="font-semibold text-blue-900">{t.totalRecords}</h3>
-                  <p className="text-2xl font-bold text-blue-700">{results.summary?.total || 0}</p>
+            {results.length === 0 ? (
+              <div className="text-center py-8">
+                <p className="text-gray-500">{t.noResultsFound}</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {/* Estadísticas */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div className="bg-blue-50 p-3 rounded-lg">
+                    <div className="text-2xl font-bold text-blue-600">{results.length}</div>
+                    <div className="text-sm text-blue-800">{t.records}</div>
+                  </div>
+                  <div className="bg-green-50 p-3 rounded-lg">
+                    <div className="text-2xl font-bold text-green-600">{uniquePatients}</div>
+                    <div className="text-sm text-green-800">{t.uniquePatients}</div>
+                  </div>
+                  <div className="bg-purple-50 p-3 rounded-lg">
+                    <div className="text-2xl font-bold text-purple-600">{uniqueQuestions}</div>
+                    <div className="text-sm text-purple-800">{t.uniqueQuestions}</div>
+                  </div>
+                  <div className="bg-orange-50 p-3 rounded-lg">
+                    <div className="text-2xl font-bold text-orange-600">{totalResponses}</div>
+                    <div className="text-sm text-orange-800">{t.totalResponses}</div>
+                  </div>
                 </div>
-                <div className="p-4 bg-green-50 rounded-lg">
-                  <h3 className="font-semibold text-green-900">{t.filteredRecords}</h3>
-                  <p className="text-2xl font-bold text-green-700">{results.summary?.filtered || 0}</p>
+
+                {/* Tabla de resultados */}
+                <div className="border rounded-lg overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>{t.patientId}</TableHead>
+                        <TableHead>{t.question}</TableHead>
+                        <TableHead>{t.answer}</TableHead>
+                        <TableHead>{t.instanceId}</TableHead>
+                        <TableHead className="text-center">{t.total}</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {results.map((result, index) => {
+                        const question = questions.find((q) => q.id === result.question_id)
+                        const questionText = question
+                          ? language === "es"
+                            ? question.text_es
+                            : question.text_en
+                          : `Question ${result.question_id}`
+
+                        return (
+                          <TableRow key={index}>
+                            <TableCell className="font-medium">{result.patient_id}</TableCell>
+                            <TableCell>
+                              <div className="max-w-xs">
+                                <span className="text-sm cursor-help" title={questionText}>
+                                  {questionText.length > 50 ? `${questionText.substring(0, 50)}...` : questionText}
+                                </span>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="max-w-xs">
+                                <span className="text-sm">
+                                  {result.answer_text.length > 100
+                                    ? `${result.answer_text.substring(0, 100)}...`
+                                    : result.answer_text}
+                                </span>
+                              </div>
+                            </TableCell>
+                            <TableCell>{result.form_instance_id}</TableCell>
+                            <TableCell className="text-center">
+                              <Badge variant="secondary">{result.total}</Badge>
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })}
+                    </TableBody>
+                  </Table>
                 </div>
               </div>
-
-              {/* Data Preview */}
-              {results.data && results.data.length > 0 ? (
-                <div className="border rounded-lg overflow-hidden">
-                  <div className="bg-gray-50 px-4 py-2 border-b">
-                    <h3 className="font-semibold">{t.data}</h3>
-                  </div>
-                  <div className="p-4 max-h-96 overflow-auto">
-                    <pre className="text-sm bg-gray-100 p-4 rounded overflow-auto">
-                      {JSON.stringify(results.data.slice(0, 10), null, 2)}
-                    </pre>
-                    {results.data.length > 10 && (
-                      <p className="text-sm text-gray-500 mt-2">
-                        {language === "es"
-                          ? `Mostrando los primeros 10 de ${results.data.length} registros`
-                          : `Showing first 10 of ${results.data.length} records`}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                <div className="text-center py-8">
-                  <p className="text-gray-500">{t.noResults}</p>
-                </div>
-              )}
-            </div>
+            )}
           </CardContent>
         </Card>
       )}

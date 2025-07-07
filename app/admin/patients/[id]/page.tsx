@@ -21,9 +21,8 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import Link from "next/link"
-import { nationalitiesApi, patientsApi } from "@/lib/api"
+import { nationalitiesApi } from "@/lib/api"
 import { config } from "@/lib/config"
-import { authUtils } from "@/lib/auth"
 
 interface PatientProtocol {
   id: number
@@ -100,9 +99,6 @@ export default function EditPatientPage() {
     protocolsToRemove: [],
   })
 
-  const isAdmin = authUtils.isAdmin()
-  const canEdit = authUtils.canEdit()
-
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -113,7 +109,18 @@ export default function EditPatientPage() {
 
         // Cargar datos del paciente
         setIsLoadingPatient(true)
-        const patientData = await patientsApi.getPatient(patientId)
+        const patientResponse = await fetch(`${config.API_BASE_URL}/patients/${patientId}`, {
+          headers: {
+            "ngrok-skip-browser-warning": "true",
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
+          },
+        })
+
+        if (!patientResponse.ok) {
+          throw new Error("Error al cargar datos del paciente")
+        }
+
+        const patientData = await patientResponse.json()
         setPatient({
           firstName: patientData.first_name || "",
           lastName: patientData.last_name || "",
@@ -128,7 +135,7 @@ export default function EditPatientPage() {
         const protocolsResponse = await fetch(`${config.API_BASE_URL}/patient-protocols/patient/${patientId}`, {
           headers: {
             "ngrok-skip-browser-warning": "true",
-            Authorization: `Bearer ${localStorage.getItem(config.TOKEN_KEY)}`,
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
           },
         })
 
@@ -148,7 +155,7 @@ export default function EditPatientPage() {
                 {
                   headers: {
                     "ngrok-skip-browser-warning": "true",
-                    Authorization: `Bearer ${localStorage.getItem(config.TOKEN_KEY)}`,
+                    Authorization: `Bearer ${localStorage.getItem("token")}`,
                   },
                 },
               )
@@ -160,7 +167,7 @@ export default function EditPatientPage() {
                 {
                   headers: {
                     "ngrok-skip-browser-warning": "true",
-                    Authorization: `Bearer ${localStorage.getItem(config.TOKEN_KEY)}`,
+                    Authorization: `Bearer ${localStorage.getItem("token")}`,
                   },
                 },
               )
@@ -200,7 +207,7 @@ export default function EditPatientPage() {
       const response = await fetch(`${config.API_BASE_URL}/protocols`, {
         headers: {
           "ngrok-skip-browser-warning": "true",
-          Authorization: `Bearer ${localStorage.getItem(config.TOKEN_KEY)}`,
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
         },
       })
 
@@ -237,11 +244,6 @@ export default function EditPatientPage() {
   }
 
   const handleUnassignProtocol = (protocolId: number) => {
-    if (!canEdit) {
-      alert("No tienes permisos para realizar esta acción")
-      return
-    }
-
     // Verificar si es un protocolo recién agregado (pendiente)
     const isNewProtocol = pendingChanges.protocolsToAdd.some((p) => p.protocol_id === protocolId)
 
@@ -271,11 +273,6 @@ export default function EditPatientPage() {
   }
 
   const handleAssignProtocol = () => {
-    if (!canEdit) {
-      alert("No tienes permisos para realizar esta acción")
-      return
-    }
-
     if (!selectedProtocolId || !startDate) {
       alert("Por favor seleccione un protocolo y una fecha de inicio")
       return
@@ -323,11 +320,6 @@ export default function EditPatientPage() {
   }
 
   const saveAllChanges = async () => {
-    if (!canEdit) {
-      alert("No tienes permisos para realizar esta acción")
-      return
-    }
-
     // Validar campos obligatorios del paciente
     if (
       !patient.firstName ||
@@ -351,7 +343,7 @@ export default function EditPatientPage() {
     setIsSaving(true)
 
     try {
-      // 1. Actualizar datos del paciente usando la API corregida
+      // 1. Actualizar datos del paciente
       const patientData = {
         first_name: patient.firstName,
         last_name: patient.lastName,
@@ -361,8 +353,19 @@ export default function EditPatientPage() {
         phone: patient.phone,
       }
 
-      console.log("Actualizando paciente:", patientData)
-      await patientsApi.updatePatient(patientId, patientData)
+      const patientResponse = await fetch(`${config.API_BASE_URL}/patients/${patientId}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "ngrok-skip-browser-warning": "true",
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+        body: JSON.stringify(patientData),
+      })
+
+      if (!patientResponse.ok) {
+        throw new Error("Error al actualizar datos del paciente")
+      }
 
       // 2. Desasignar protocolos
       for (const protocolId of pendingChanges.protocolsToRemove) {
@@ -371,7 +374,7 @@ export default function EditPatientPage() {
           headers: {
             "Content-Type": "application/json",
             "ngrok-skip-browser-warning": "true",
-            Authorization: `Bearer ${localStorage.getItem(config.TOKEN_KEY)}`,
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
           },
           body: JSON.stringify({
             idPaciente: patientId,
@@ -384,33 +387,25 @@ export default function EditPatientPage() {
         }
       }
 
-      // 3. Asignar nuevos protocolos usando el endpoint correcto
-      const user = authUtils.getUser()
-      const userId = user?.id || 1
-
+      // 3. Asignar nuevos protocolos
       for (const protocolToAdd of pendingChanges.protocolsToAdd) {
-        const assignData = {
-          patient_id: patientId,
-          protocol_id: protocolToAdd.protocol_id,
-          start_date: protocolToAdd.start_date,
-          assigned_by: userId,
-        }
-
-        console.log("Asignando protocolo con datos:", assignData)
-
         const assignResponse = await fetch(`${config.API_BASE_URL}/patient-protocols`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             "ngrok-skip-browser-warning": "true",
-            Authorization: `Bearer ${localStorage.getItem(config.TOKEN_KEY)}`,
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
           },
-          body: JSON.stringify(assignData),
+          body: JSON.stringify({
+            patient_id: patientId,
+            protocol_id: protocolToAdd.protocol_id,
+            start_date: protocolToAdd.start_date,
+            assigned_by: Number.parseInt(localStorage.getItem("userId") || "1"), // ID del usuario actual
+          }),
         })
 
         if (!assignResponse.ok) {
-          const errorText = await assignResponse.text()
-          console.error(`Error asignando protocolo ${protocolToAdd.protocol_id}:`, errorText)
+          console.error(`Error asignando protocolo ${protocolToAdd.protocol_id}`)
         }
       }
 
@@ -473,21 +468,19 @@ export default function EditPatientPage() {
             <p className="text-muted-foreground">Modifique la información del paciente</p>
           </div>
         </div>
-        {canEdit && (
-          <Button onClick={saveAllChanges} disabled={isSaving}>
-            {isSaving ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Guardando...
-              </>
-            ) : (
-              <>
-                <Save className="mr-2 h-4 w-4" />
-                Guardar cambios
-              </>
-            )}
-          </Button>
-        )}
+        <Button onClick={saveAllChanges} disabled={isSaving}>
+          {isSaving ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Guardando...
+            </>
+          ) : (
+            <>
+              <Save className="mr-2 h-4 w-4" />
+              Guardar cambios
+            </>
+          )}
+        </Button>
       </div>
 
       {/* Mostrar indicador de cambios pendientes */}
@@ -521,7 +514,6 @@ export default function EditPatientPage() {
                 onChange={handleInputChange}
                 placeholder="Ingrese el nombre"
                 required
-                disabled={!canEdit}
               />
             </div>
             <div className="space-y-2">
@@ -535,7 +527,6 @@ export default function EditPatientPage() {
                 onChange={handleInputChange}
                 placeholder="Ingrese el apellido"
                 required
-                disabled={!canEdit}
               />
             </div>
           </div>
@@ -548,7 +539,7 @@ export default function EditPatientPage() {
               <Select
                 value={patient.nationalityId}
                 onValueChange={(value) => handleSelectChange("nationalityId", value)}
-                disabled={isLoadingNationalities || !canEdit}
+                disabled={isLoadingNationalities}
               >
                 <SelectTrigger id="nationalityId">
                   <SelectValue placeholder={isLoadingNationalities ? "Cargando..." : "Seleccione nacionalidad"} />
@@ -573,7 +564,6 @@ export default function EditPatientPage() {
                 value={patient.dateOfBirth}
                 onChange={handleInputChange}
                 required
-                disabled={!canEdit}
               />
             </div>
           </div>
@@ -591,7 +581,6 @@ export default function EditPatientPage() {
                 onChange={handleInputChange}
                 placeholder="correo@ejemplo.com"
                 required
-                disabled={!canEdit}
               />
             </div>
             <div className="space-y-2">
@@ -605,7 +594,6 @@ export default function EditPatientPage() {
                 onChange={handleInputChange}
                 placeholder="+54 11 1234-5678"
                 required
-                disabled={!canEdit}
               />
             </div>
           </div>
@@ -623,85 +611,83 @@ export default function EditPatientPage() {
               </CardTitle>
               <CardDescription>Protocolos médicos asignados a este paciente y sus formularios</CardDescription>
             </div>
-            {canEdit && (
-              <Dialog open={showAssignDialog} onOpenChange={setShowAssignDialog}>
-                <DialogTrigger asChild>
-                  <Button
-                    onClick={() => {
-                      console.log("Botón asignar protocolo clickeado")
-                      loadAvailableProtocols()
-                      setShowAssignDialog(true)
-                    }}
-                  >
-                    <Plus className="h-4 w-4 mr-2" />
-                    Asignar Protocolo
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Asignar Protocolo</DialogTitle>
-                    <DialogDescription>
-                      Seleccione un protocolo y la fecha de inicio para asignarlo al paciente.
-                    </DialogDescription>
-                  </DialogHeader>
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="protocol">Protocolo</Label>
-                      <Select
-                        value={selectedProtocolId}
-                        onValueChange={setSelectedProtocolId}
-                        disabled={isLoadingAvailableProtocols}
-                      >
-                        <SelectTrigger>
-                          <SelectValue
-                            placeholder={
-                              isLoadingAvailableProtocols
-                                ? "Cargando protocolos..."
-                                : availableProtocols.length === 0
-                                  ? "No hay protocolos disponibles"
-                                  : "Seleccione un protocolo"
-                            }
-                          />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {availableProtocols.map((protocol) => (
-                            <SelectItem key={protocol.id} value={protocol.id.toString()}>
-                              {protocol.name_es}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      {isLoadingAvailableProtocols && (
-                        <div className="flex items-center gap-2 text-sm text-gray-600">
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                          Cargando protocolos...
-                        </div>
-                      )}
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="startDate">Fecha de inicio</Label>
-                      <Input
-                        id="startDate"
-                        type="date"
-                        value={startDate}
-                        onChange={(e) => setStartDate(e.target.value)}
-                      />
-                    </div>
-                  </div>
-                  <DialogFooter>
-                    <Button variant="outline" onClick={() => setShowAssignDialog(false)}>
-                      Cancelar
-                    </Button>
-                    <Button
-                      onClick={handleAssignProtocol}
-                      disabled={!selectedProtocolId || !startDate || isLoadingAvailableProtocols}
+            <Dialog open={showAssignDialog} onOpenChange={setShowAssignDialog}>
+              <DialogTrigger asChild>
+                <Button
+                  onClick={() => {
+                    console.log("Botón asignar protocolo clickeado")
+                    loadAvailableProtocols()
+                    setShowAssignDialog(true)
+                  }}
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Asignar Protocolo
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Asignar Protocolo</DialogTitle>
+                  <DialogDescription>
+                    Seleccione un protocolo y la fecha de inicio para asignarlo al paciente.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="protocol">Protocolo</Label>
+                    <Select
+                      value={selectedProtocolId}
+                      onValueChange={setSelectedProtocolId}
+                      disabled={isLoadingAvailableProtocols}
                     >
-                      Asignar
-                    </Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
-            )}
+                      <SelectTrigger>
+                        <SelectValue
+                          placeholder={
+                            isLoadingAvailableProtocols
+                              ? "Cargando protocolos..."
+                              : availableProtocols.length === 0
+                                ? "No hay protocolos disponibles"
+                                : "Seleccione un protocolo"
+                          }
+                        />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {availableProtocols.map((protocol) => (
+                          <SelectItem key={protocol.id} value={protocol.id.toString()}>
+                            {protocol.name_es}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {isLoadingAvailableProtocols && (
+                      <div className="flex items-center gap-2 text-sm text-gray-600">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Cargando protocolos...
+                      </div>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="startDate">Fecha de inicio</Label>
+                    <Input
+                      id="startDate"
+                      type="date"
+                      value={startDate}
+                      onChange={(e) => setStartDate(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setShowAssignDialog(false)}>
+                    Cancelar
+                  </Button>
+                  <Button
+                    onClick={handleAssignProtocol}
+                    disabled={!selectedProtocolId || !startDate || isLoadingAvailableProtocols}
+                  >
+                    Asignar
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           </div>
         </CardHeader>
         <CardContent>
@@ -752,17 +738,15 @@ export default function EditPatientPage() {
                             Iniciado: {new Date(protocol.start_date).toLocaleDateString()}
                           </CardDescription>
                         </div>
-                        {canEdit && (
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            onClick={() => handleUnassignProtocol(protocol.protocol_id)}
-                            disabled={isToBeRemoved}
-                          >
-                            <X className="h-4 w-4 mr-1" />
-                            {isToBeRemoved ? "Eliminado" : "Desasignar"}
-                          </Button>
-                        )}
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => handleUnassignProtocol(protocol.protocol_id)}
+                          disabled={isToBeRemoved}
+                        >
+                          <X className="h-4 w-4 mr-1" />
+                          {isToBeRemoved ? "Eliminado" : "Desasignar"}
+                        </Button>
                       </div>
                     </CardHeader>
                     {!isNewProtocol && !isToBeRemoved && (
@@ -850,21 +834,19 @@ export default function EditPatientPage() {
         <Link href="/admin/patients">
           <Button variant="outline">Cancelar</Button>
         </Link>
-        {canEdit && (
-          <Button onClick={saveAllChanges} disabled={isSaving}>
-            {isSaving ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Guardando...
-              </>
-            ) : (
-              <>
-                <Save className="mr-2 h-4 w-4" />
-                Guardar cambios
-              </>
-            )}
-          </Button>
-        )}
+        <Button onClick={saveAllChanges} disabled={isSaving}>
+          {isSaving ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Guardando...
+            </>
+          ) : (
+            <>
+              <Save className="mr-2 h-4 w-4" />
+              Guardar cambios
+            </>
+          )}
+        </Button>
       </div>
     </div>
   )
