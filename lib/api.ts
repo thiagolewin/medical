@@ -238,7 +238,7 @@ export const usersApi = {
   },
 
   createUser: async (userData: any) => {
-    const response = await fetch(`${API_BASE_URL}/users`, {
+    const response = await fetch(`${API_BASE_URL}/users/register`, {
       method: "POST",
       headers: getAuthHeaders(),
       body: JSON.stringify(userData),
@@ -267,7 +267,7 @@ export const usersApi = {
 // Analysis API
 export const analysisApi = {
   executeAnalysis: async (payload: any) => {
-    const response = await fetch(`${API_BASE_URL}/analysis`, {
+    const response = await fetch(`${API_BASE_URL}/responses/analizeData`, {
       method: "POST",
       headers: getAuthHeaders(),
       body: JSON.stringify(payload),
@@ -279,7 +279,7 @@ export const analysisApi = {
 // Questions API
 export const questionsApi = {
   getQuestionsByForm: async (formId: number) => {
-    const response = await fetch(`${API_BASE_URL}/forms/${formId}/questions`, {
+    const response = await fetch(`${API_BASE_URL}/questions/form/${formId}`, {
       headers: getAuthHeaders(),
     })
     return handleResponse(response)
@@ -291,12 +291,48 @@ export const questionsApi = {
     })
     return handleResponse(response)
   },
+
+  createQuestion: async (questionData: any) => {
+    const response = await fetch(`${API_BASE_URL}/questions`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+      body: JSON.stringify(questionData),
+    })
+    return handleResponse(response)
+  },
+
+  addOption: async (questionId: number, optionData: any) => {
+    const response = await fetch(`${API_BASE_URL}/questions/${questionId}/options`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+      body: JSON.stringify(optionData),
+    })
+    return handleResponse(response)
+  },
 }
 
 // Question Types API
 export const questionTypesApi = {
   getQuestionTypes: async () => {
     const response = await fetch(`${API_BASE_URL}/question-types`, {
+      headers: getAuthHeaders(),
+    })
+    return handleResponse(response)
+  },
+  createQuestionType: async (data: { key_name: string, name_es: string, name_en: string }) => {
+    const response = await fetch(`${API_BASE_URL}/question-types`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    })
+    return handleResponse(response)
+  },
+}
+
+// Nationalities API
+export const nationalitiesApi = {
+  getNationalities: async () => {
+    const response = await fetch(`${API_BASE_URL}/patients/nationalities`, {
       headers: getAuthHeaders(),
     })
     return handleResponse(response)

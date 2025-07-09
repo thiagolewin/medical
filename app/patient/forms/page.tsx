@@ -13,6 +13,8 @@ import { config } from "@/lib/config"
 
 interface FormWithStatus {
   id: number
+  name_es: string
+  name_en: string
   title: string
   description: string
   protocol_name: string
@@ -41,6 +43,8 @@ interface ProtocolForm {
 
 export default function PatientFormsPage() {
   const [availableForms, setAvailableForms] = useState<FormWithStatus[]>([])
+  const [pendingForms, setPendingForms] = useState<FormWithStatus[]>([])
+  const [completedForms, setCompletedForms] = useState<FormWithStatus[]>([])
   const [filteredForms, setFilteredForms] = useState<FormWithStatus[]>([])
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState<string>("available")
@@ -93,170 +97,114 @@ export default function PatientFormsPage() {
   }
 
   useEffect(() => {
+    const fetchWithCheck = async (url: string) => {
+      const res = await fetch(url)
+      if (!res.ok) throw new Error(`Error al cargar: ${url}`)
+      return res.json()
+    }
+
     const loadPatientForms = async () => {
       try {
         setIsLoading(true)
         setError("")
 
-        console.log("=== CARGANDO FORMULARIOS DEL PACIENTE ===")
-
         // Obtener el ID del paciente
         const patient = patientAuthUtils.getPatient()
-        console.log("Patient data from auth utils:", patient)
-
         if (!patient || !patient.id) {
           throw new Error("No se encontró información del paciente")
         }
-
         const patientId = patient.id
-        console.log("Patient ID:", patientId)
 
-        // 1. Obtener protocolos del paciente
-        console.log(`1. GET ${config.API_BASE_URL}/patient-protocols/patient/${patientId}`)
-        const patientProtocols = await patientProtocolApi.getMyProtocols(patientId)
-        console.log("Protocolos obtenidos:", patientProtocols)
+        // 1. Obtener protocolos asignados al paciente
+        const patientProtocols = await fetchWithCheck(`${config.API_BASE_URL}/patient-protocols/patient/${patientId}`)
+        // patientProtocols: [{ id: patient_protocol_id, protocol_id, ... }]
 
-        if (!patientProtocols || patientProtocols.length === 0) {
-          console.log("No se encontraron protocolos para el paciente")
-          setAvailableForms([])
-          setIsLoading(false)
-          return
+        // Helper para buscar patient_protocol_id por protocolo
+        const getPatientProtocolId = (protocol_id: number) => {
+          const found = patientProtocols.find((p: any) => p.protocol_id === protocol_id)
+          return found ? found.id : null
         }
 
-        // 2. Para cada protocolo, obtener sus formularios y verificar disponibilidad
-        const allForms: FormWithStatus[] = []
+        // Helper para mapear los datos de la API a lo que espera el front
+        const mapForm = (form: any, estado: 'available' | 'pending' | 'completed'): FormWithStatus => {
+          // Usar directamente los campos de la API si existen
+          const protocol_id = form.protocol_id || form.protocolid || 0
+          const patient_protocol_id = form.patient_protocol_id || form.patientprotocolid || 0
 
-        for (const protocol of patientProtocols) {
-          try {
-            console.log(`\n=== PROCESANDO PROTOCOLO ${protocol.protocol_id} ===`)
-            console.log("Protocolo completo:", protocol)
-
-            // Obtener formularios del protocolo
-            const protocolFormsUrl = `${config.API_BASE_URL}/protocols/${protocol.protocol_id}/forms`
-            console.log(`2a. GET ${protocolFormsUrl}`)
-
-            const response = await fetch(protocolFormsUrl, {
-              headers: {
-                "Content-Type": "application/json",
-                "ngrok-skip-browser-warning": "true",
-                ...(localStorage.getItem(config.PATIENT_TOKEN_KEY) && {
-                  Authorization: `Bearer ${localStorage.getItem(config.PATIENT_TOKEN_KEY)}`,
-                }),
-              },
-            })
-
-            if (!response.ok) {
-              console.error(`Error obteniendo formularios del protocolo ${protocol.protocol_id}:`, response.status)
-              continue
-            }
-
-            const protocolForms: ProtocolForm[] = await response.json()
-            console.log(`Formularios del protocolo ${protocol.protocol_id}:`, protocolForms)
-
-            // Obtener formularios ya respondidos
-            const respondedUrl = `${config.API_BASE_URL}/protocols/${protocol.protocol_id}/responded/${patientId}`
-            console.log(`2b. GET ${respondedUrl}`)
-            const respondedForms = await patientProtocolApi.getRespondedForms(protocol.protocol_id, patientId)
-            console.log(`Formularios respondidos del protocolo ${protocol.protocol_id}:`, respondedForms)
-
-            // 3. Procesar cada formulario del protocolo
-            for (const protocolForm of protocolForms) {
-              console.log(`\n--- Procesando formulario: ${protocolForm.form_name_es} ---`)
-              console.log("Form ID:", protocolForm.form_id)
-              console.log("Delay days:", protocolForm.delay_days)
-              console.log("Protocol start date:", protocol.start_date)
-
-              // Verificar disponibilidad basada en start_date + delay_days
-              const availability = isFormAvailable(protocol.start_date, protocolForm.delay_days)
-
-              // Verificar si ya fue completado
-              const isCompleted = respondedForms.some((rf) => rf.id === protocolForm.form_id)
-              console.log("¿Ya completado?", isCompleted)
-
-              const formWithStatus: FormWithStatus = {
-                id: protocolForm.form_id,
-                title: protocolForm.form_name_es,
-                description: `Formulario del protocolo ${protocol.protocol_name_es}`,
-                protocol_name: protocol.protocol_name_es,
-                protocol_id: protocol.protocol_id,
-                patient_protocol_id: protocol.id,
-                is_available: availability.available && !isCompleted,
-                is_completed: isCompleted,
-                start_date: protocol.start_date,
-                delay_days: protocolForm.delay_days,
-                available_date: availability.availableDate,
-                days_until_available: availability.daysUntil,
-              }
-
-              console.log("Formulario procesado final:", formWithStatus)
-              allForms.push(formWithStatus)
-
-              console.log("=== DEBUG FORMULARIO ===")
-              console.log("Form title:", protocolForm.form_name_es)
-              console.log("Protocol start date:", protocol.start_date)
-              console.log("Delay days:", protocolForm.delay_days)
-              console.log("Availability result:", availability)
-              console.log("Is completed:", isCompleted)
-              console.log("Final is_available:", availability.available && !isCompleted)
-              console.log("========================")
-            }
-          } catch (error) {
-            console.error(`Error procesando protocolo ${protocol.protocol_id}:`, error)
+          let available_date = form.start_date
+          let days_until_available: number | undefined = undefined
+          if (estado === 'pending') {
+            const today = new Date()
+            const availableDate = new Date(form.start_date)
+            const diffTime = availableDate.getTime() - today.getTime()
+            days_until_available = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+            available_date = form.start_date
+          }
+          return {
+            id: form.id,
+            name_es: form.name_es,
+            name_en: form.name_en,
+            title: form.name_es,
+            description: form.description_es,
+            protocol_name: form.key_name || '',
+            protocol_id: protocol_id,
+            patient_protocol_id: patient_protocol_id,
+            is_available: estado === 'available',
+            is_completed: estado === 'completed',
+            start_date: form.start_date,
+            delay_days: form.delay_days,
+            available_date: available_date,
+            days_until_available: days_until_available,
           }
         }
 
-        console.log("\n=== FORMULARIOS FINALES ===")
-        console.log("Total formularios:", allForms.length)
-        console.log("Formularios disponibles:", allForms.filter((f) => f.is_available).length)
-        console.log("Formularios completados:", allForms.filter((f) => f.is_completed).length)
-        console.log("Formularios pendientes:", allForms.filter((f) => !f.is_available && !f.is_completed).length)
+        // Obtener forms disponibles
+        const availableRaw = await fetchWithCheck(`${config.API_BASE_URL}/patients/avaiables/${patientId}`)
+        const available = Array.isArray(availableRaw) ? availableRaw.map(f => mapForm(f, 'available')) : []
+        setAvailableForms(available)
 
-        // Log detallado de cada formulario
-        allForms.forEach((form, index) => {
-          console.log(`Formulario ${index + 1}:`, {
-            title: form.title,
-            is_available: form.is_available,
-            is_completed: form.is_completed,
-            days_until_available: form.days_until_available,
-            start_date: form.start_date,
-            delay_days: form.delay_days,
-          })
-        })
+        // Obtener forms pendientes
+        const pendingRaw = await fetchWithCheck(`${config.API_BASE_URL}/patients/pending/${patientId}`)
+        const pending = Array.isArray(pendingRaw) ? pendingRaw.map(f => mapForm(f, 'pending')) : []
+        setPendingForms(pending)
 
-        setAvailableForms(allForms)
-      } catch (error) {
-        console.error("Error cargando formularios del paciente:", error)
-        setError("Error al cargar los formularios. Por favor, inténtelo de nuevo.")
-      } finally {
+        // Obtener forms completados
+        const completedRaw = await fetchWithCheck(`${config.API_BASE_URL}/patients/completados/${patientId}`)
+        const completed = Array.isArray(completedRaw) ? completedRaw.map(f => mapForm(f, 'completed')) : []
+        setCompletedForms(completed)
+
+        setIsLoading(false)
+      } catch (err: any) {
+        setError(err.message || "Error cargando formularios")
         setIsLoading(false)
       }
     }
-
     loadPatientForms()
   }, [])
 
   useEffect(() => {
-    // Filtrar formularios basado en búsqueda y filtro de estado
-    let filtered = availableForms
-
+    let filtered: FormWithStatus[] = []
+    if (statusFilter === "available") {
+      filtered = Array.isArray(availableForms) ? availableForms : []
+    } else if (statusFilter === "completed") {
+      filtered = Array.isArray(completedForms) ? completedForms : []
+    } else if (statusFilter === "pending") {
+      filtered = Array.isArray(pendingForms) ? pendingForms : []
+    } else if (statusFilter === "all") {
+      filtered = [
+        ...(Array.isArray(availableForms) ? availableForms : []),
+        ...(Array.isArray(pendingForms) ? pendingForms : []),
+        ...(Array.isArray(completedForms) ? completedForms : [])
+      ]
+    }
     if (searchTerm) {
-      filtered = filtered.filter(
-        (form) =>
-          form.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          form.protocol_name.toLowerCase().includes(searchTerm.toLowerCase()),
+      filtered = filtered.filter((form) =>
+        form.name_es?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        form.name_en?.toLowerCase().includes(searchTerm.toLowerCase())
       )
     }
-
-    if (statusFilter === "available") {
-      filtered = filtered.filter((form) => form.is_available)
-    } else if (statusFilter === "completed") {
-      filtered = filtered.filter((form) => form.is_completed)
-    } else if (statusFilter === "pending") {
-      filtered = filtered.filter((form) => !form.is_available && !form.is_completed)
-    }
-
     setFilteredForms(filtered)
-  }, [availableForms, searchTerm, statusFilter])
+  }, [availableForms, completedForms, pendingForms, searchTerm, statusFilter])
 
   const getStatusBadge = (form: FormWithStatus) => {
     if (form.is_completed) {
@@ -268,9 +216,10 @@ export default function PatientFormsPage() {
     }
   }
 
-  const availableCount = availableForms.filter((f) => f.is_available).length
-  const completedCount = availableForms.filter((f) => f.is_completed).length
-  const pendingCount = availableForms.filter((f) => !f.is_available && !f.is_completed).length
+  const availableCount = availableForms.length
+  const completedCount = completedForms.length
+  const pendingCount = pendingForms.length
+  const allCount = availableForms.length + completedForms.length + pendingForms.length
 
   if (isLoading) {
     return (
@@ -388,7 +337,7 @@ export default function PatientFormsPage() {
                   size="sm"
                   className="flex-1 sm:flex-none text-xs sm:text-sm"
                 >
-                  Todos ({availableForms.length})
+                  Todos ({allCount})
                 </Button>
               </div>
             </div>
@@ -397,7 +346,7 @@ export default function PatientFormsPage() {
 
         {/* Lista de formularios */}
         <div className="space-y-4">
-          {filteredForms.length === 0 ? (
+          {Array.isArray(filteredForms) && filteredForms.length === 0 ? (
             <Card>
               <CardContent className="text-center py-12">
                 <FileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
@@ -410,8 +359,8 @@ export default function PatientFormsPage() {
               </CardContent>
             </Card>
           ) : (
-            filteredForms.map((form) => (
-              <Card key={`${form.protocol_id}-${form.id}`} className="hover:shadow-md transition-shadow">
+            Array.isArray(filteredForms) && filteredForms.map((form) => (
+              <Card key={form.id} className="hover:shadow-md transition-shadow">
                 <CardContent className="p-4 sm:p-6">
                   <div className="space-y-4">
                     <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
@@ -425,7 +374,9 @@ export default function PatientFormsPage() {
                         <div className="text-xs sm:text-sm text-gray-500 space-y-1">
                           <p>Inicio del protocolo: {new Date(form.start_date).toLocaleDateString()}</p>
                           <p>Días de espera: {form.delay_days}</p>
-                          <p>Disponible desde: {new Date(form.available_date).toLocaleDateString()}</p>
+                          {form.available_date && (
+                            <p>Disponible desde: {new Date(form.available_date).toLocaleDateString()}</p>
+                          )}
                           {form.days_until_available && form.days_until_available > 0 && (
                             <p className="text-yellow-600 font-medium">
                               Disponible en {form.days_until_available} día{form.days_until_available > 1 ? "s" : ""}
@@ -443,14 +394,24 @@ export default function PatientFormsPage() {
                             Completado
                           </Button>
                         ) : form.is_available ? (
-                          <Link
-                            href={`/patient/forms/${form.id}?protocol_id=${form.protocol_id}&patient_protocol_id=${form.patient_protocol_id}`}
-                          >
-                            <Button size="sm" className="bg-red-600 hover:bg-red-700 text-xs sm:text-sm min-h-[36px]">
-                              <FileText className="h-4 w-4 mr-2" />
-                              Completar
-                            </Button>
-                          </Link>
+                          <>
+                            {console.log('Form:', form.id, 'protocol_id:', form.protocol_id, 'patient_protocol_id:', form.patient_protocol_id)}
+                            {form.protocol_id && form.patient_protocol_id ? (
+                              <Link
+                                href={`/patient/forms/${form.id}?protocol_id=${form.protocol_id}&patient_protocol_id=${form.patient_protocol_id}`}
+                              >
+                                <Button size="sm" className="bg-red-600 hover:bg-red-700 text-xs sm:text-sm min-h-[36px]">
+                                  <FileText className="h-4 w-4 mr-2" />
+                                  Completar
+                                </Button>
+                              </Link>
+                            ) : (
+                              <Button variant="outline" size="sm" disabled className="text-xs sm:text-sm">
+                                <AlertCircle className="h-4 w-4 mr-2 text-yellow-600" />
+                                Datos incompletos
+                              </Button>
+                            )}
+                          </>
                         ) : (
                           <Button variant="outline" size="sm" disabled className="text-xs sm:text-sm">
                             <Clock className="h-4 w-4 mr-2" />

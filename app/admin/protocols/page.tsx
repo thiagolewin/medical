@@ -9,6 +9,7 @@ import { Plus, Search, Edit, Trash2, FileText, Calendar, Loader2 } from "lucide-
 import Link from "next/link"
 import { protocolsApi } from "@/lib/api"
 import { useLanguage } from "@/lib/language-context"
+import { authUtils } from "@/lib/auth"
 
 interface Protocol {
   id: number
@@ -29,6 +30,9 @@ export default function ProtocolsPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [isLoading, setIsLoading] = useState(true)
   const [loadingForms, setLoadingForms] = useState<Record<number, boolean>>({})
+
+  const user = typeof window !== "undefined" ? authUtils.getUser() : null;
+  const isViewer = user?.role === "viewer";
 
   useEffect(() => {
     const fetchProtocols = async () => {
@@ -126,12 +130,7 @@ export default function ProtocolsPage() {
             {language === "es" ? "Gestione los protocolos médicos del sistema" : "Manage medical system protocols"}
           </p>
         </div>
-        <Link href="/admin/protocols/new">
-          <Button>
-            <Plus className="mr-2 h-4 w-4" />
-            {language === "es" ? "Nuevo protocolo" : "New protocol"}
-          </Button>
-        </Link>
+        { !isViewer && <Link href="/admin/protocols/new"><Button>Nuevo protocolo</Button></Link> }
       </div>
 
       <div className="flex items-center space-x-2">
@@ -159,12 +158,7 @@ export default function ProtocolsPage() {
                 ? "No se encontraron protocolos. Cree uno nuevo para comenzar."
                 : "No protocols found. Create a new one to get started."}
             </p>
-            <Link href="/admin/protocols/new">
-              <Button>
-                <Plus className="mr-2 h-4 w-4" />
-                {language === "es" ? "Crear primer protocolo" : "Create first protocol"}
-              </Button>
-            </Link>
+            { !isViewer && <Link href="/admin/protocols/new"><Button>Crear primer protocolo</Button></Link> }
           </CardContent>
         </Card>
       ) : (
@@ -202,19 +196,15 @@ export default function ProtocolsPage() {
                     {language === "es" ? "Creado:" : "Created:"} {new Date(protocol.created_at).toLocaleDateString()}
                   </div>
                   <div className="flex space-x-2">
-                    <Link href={`/admin/protocols/${protocol.id}`}>
-                      <Button variant="outline" size="sm">
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                    </Link>
-                    <Button
+                    { !isViewer && <Link href={`/admin/protocols/${protocol.id}`}><Button variant="outline" size="sm"><Edit className="h-4 w-4" /></Button></Link> }
+                    { !isViewer && <Button
                       variant="outline"
                       size="sm"
                       onClick={() => deleteProtocol(protocol.id)}
                       className="text-red-600 hover:text-red-700"
                     >
                       <Trash2 className="h-4 w-4" />
-                    </Button>
+                    </Button> }
                   </div>
                 </div>
               </CardContent>

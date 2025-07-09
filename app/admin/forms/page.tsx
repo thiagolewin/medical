@@ -9,6 +9,7 @@ import { Plus, Search, Edit, Trash2, FileText, HelpCircle, Loader2 } from "lucid
 import Link from "next/link"
 import { formsApi, questionsApi } from "@/lib/api"
 import { useLanguage } from "@/lib/language-context"
+import { authUtils } from "@/lib/auth"
 
 interface Form {
   id: number
@@ -104,6 +105,9 @@ export default function FormsPage() {
     }
   }
 
+  const user = typeof window !== "undefined" ? authUtils.getUser() : null;
+  const isViewer = user?.role === "viewer";
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -124,12 +128,7 @@ export default function FormsPage() {
             {language === "es" ? "Gestione los formularios del sistema médico" : "Manage medical system forms"}
           </p>
         </div>
-        <Link href="/admin/forms/new">
-          <Button>
-            <Plus className="mr-2 h-4 w-4" />
-            {language === "es" ? "Nuevo formulario" : "New form"}
-          </Button>
-        </Link>
+        { !isViewer && <Link href="/admin/forms/new"><Button>Nuevo formulario</Button></Link> }
       </div>
 
       <div className="flex items-center space-x-2">
@@ -157,12 +156,7 @@ export default function FormsPage() {
                 ? "No se encontraron formularios. Cree uno nuevo para comenzar."
                 : "No forms found. Create a new one to get started."}
             </p>
-            <Link href="/admin/forms/new">
-              <Button>
-                <Plus className="mr-2 h-4 w-4" />
-                {language === "es" ? "Crear primer formulario" : "Create first form"}
-              </Button>
-            </Link>
+            { !isViewer && <Link href="/admin/forms/new"><Button>Crear primer formulario</Button></Link> }
           </CardContent>
         </Card>
       ) : (
@@ -200,19 +194,15 @@ export default function FormsPage() {
                     {language === "es" ? "Creado:" : "Created:"} {new Date(form.created_at).toLocaleDateString()}
                   </div>
                   <div className="flex space-x-2">
-                    <Link href={`/admin/forms/${form.id}`}>
-                      <Button variant="outline" size="sm">
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                    </Link>
-                    <Button
+                    { !isViewer && <Link href={`/admin/forms/${form.id}`}><Button variant="outline" size="sm"><Edit className="h-4 w-4" /></Button></Link> }
+                    { !isViewer && <Button
                       variant="outline"
                       size="sm"
                       onClick={() => deleteForm(form.id)}
                       className="text-red-600 hover:text-red-700"
                     >
                       <Trash2 className="h-4 w-4" />
-                    </Button>
+                    </Button> }
                   </div>
                 </div>
               </CardContent>

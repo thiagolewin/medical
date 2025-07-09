@@ -94,7 +94,7 @@ export default function NewFormPage() {
         const types = await questionTypesApi.getQuestionTypes()
 
         // Filtrar tipos numbers específicos y agregar opción genérica
-        const filteredTypes = types.filter((type) => !type.key_name.startsWith("numbers_"))
+        const filteredTypes = types.filter((type: { key_name: string }) => !type.key_name.startsWith("numbers_"))
 
         // Agregar opción genérica para números
         const numbersOption = {
@@ -302,7 +302,7 @@ export default function NewFormPage() {
     try {
       // Primero verificar si ya existe
       const existingTypes = await questionTypesApi.getQuestionTypes()
-      const existingType = existingTypes.find((type) => type.key_name === keyName)
+      const existingType = existingTypes.find((type: { key_name: string }) => type.key_name === keyName)
 
       if (existingType) {
         // Ya existe, usar ese ID
@@ -329,6 +329,21 @@ export default function NewFormPage() {
           : `Error creating numeric question type ${min}-${max}`,
       )
     }
+  }
+
+  // Genera un keyName para la pregunta a partir del keyName del form y el texto de la pregunta
+  const generateQuestionKeyName = (formKeyName: string, textEs: string) => {
+    const text = textEs
+      .toLowerCase()
+      .replace(/[^a-z0-9áéíóúüñ_ ]/gi, "")
+      .replace(/\s+/g, "_")
+      .substring(0, 40)
+    return `${formKeyName}_${text}`
+  }
+
+  // Genera un keyName para la opción a partir del keyName de la pregunta y el índice
+  const generateOptionKeyName = (questionKeyName: string, index: number) => {
+    return `${questionKeyName}_option_${index + 1}`
   }
 
   const saveForm = async () => {
@@ -360,7 +375,16 @@ export default function NewFormPage() {
 
       // Procesar todas las preguntas con tipo numérico temporal
       for (let i = 0; i < questionsWithNumberTypes.length; i++) {
-        const question = questionsWithNumberTypes[i]
+        let question = questionsWithNumberTypes[i]
+
+        // Generar keyName si está vacío
+        if (!question.keyName || question.keyName.trim() === "") {
+          question = {
+            ...question,
+            keyName: generateQuestionKeyName(form.keyName, question.textEs),
+          }
+          questionsWithNumberTypes[i] = question
+        }
 
         if (question.questionTypeId === -1 && question.numberRange) {
           // Crear o encontrar el tipo de pregunta numérico
@@ -409,7 +433,15 @@ export default function NewFormPage() {
 
         // Si la pregunta tiene opciones, crearlas
         if (question.options && question.options.length > 0) {
-          for (const option of question.options) {
+          for (let i = 0; i < question.options.length; i++) {
+            let option = question.options[i]
+            // Generar keyName si está vacío
+            if (!option.keyName || option.keyName.trim() === "") {
+              option = {
+                ...option,
+                keyName: generateOptionKeyName(question.keyName, i),
+              }
+            }
             const optionData = {
               key_name: option.keyName,
               text_es: option.textEs,
@@ -672,15 +704,6 @@ export default function NewFormPage() {
             <div className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="questionKeyName">{language === "es" ? "Nombre Clave" : "Key Name"} *</Label>
-                  <Input
-                    id="questionKeyName"
-                    value={currentQuestion.keyName}
-                    onChange={(e) => handleKeyNameChange(e, "question")}
-                    placeholder={language === "es" ? "ej: pregunta_edad" : "e.g: age_question"}
-                  />
-                </div>
-                <div>
                   <Label htmlFor="questionType">{language === "es" ? "Tipo de Pregunta" : "Question Type"} *</Label>
                   {isLoadingTypes ? (
                     <div className="h-10 bg-gray-100 rounded animate-pulse" />
@@ -767,12 +790,9 @@ export default function NewFormPage() {
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                               <div>
                                 <Label className="text-xs">{language === "es" ? "Clave" : "Key"}</Label>
-                                <Input
-                                  value={option.keyName}
-                                  onChange={(e) => handleOptionKeyNameChange(option.id, e.target.value)}
-                                  placeholder={language === "es" ? "ej: opcion_a" : "e.g: option_a"}
-                                  className="text-sm"
-                                />
+                                <div className="text-sm bg-gray-100 rounded px-2 py-1 border border-gray-200 select-all">
+                                  {option.keyName || "(auto)"}
+                                </div>
                               </div>
                               <div>
                                 <Label className="text-xs">

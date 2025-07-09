@@ -132,7 +132,7 @@ export default function FormDetailPage() {
     }))
 
     // Si no es la opción "otra_" o "other", limpiar el texto adicional
-    if (!option.key_name.startsWith("otra_") && option.key_name !== "other") {
+    if (!option.key_name?.startsWith("otra_") && option.key_name !== "other") {
       setOtherResponses((prev) => ({
         ...prev,
         [questionId]: "",
@@ -162,7 +162,7 @@ export default function FormDetailPage() {
         : []
 
       // Si es la opción "otra_" o "other", limpiar el texto adicional
-      if (option.key_name.startsWith("otra_") || option.key_name === "other") {
+      if (option.key_name?.startsWith("otra_") || option.key_name === "other") {
         setOtherResponses((prev) => ({
           ...prev,
           [questionId]: "",
@@ -198,9 +198,9 @@ export default function FormDetailPage() {
         console.log(
           `Verificando opción en array:`,
           opt.key_name,
-          opt.key_name.startsWith("otra_") || opt.key_name === "other",
+          opt.key_name?.startsWith("otra_") || opt.key_name === "other",
         )
-        return opt.key_name.startsWith("otra_") || opt.key_name === "other"
+        return opt.key_name?.startsWith("otra_") || opt.key_name === "other"
       })
       console.log(`Resultado para array:`, hasOther)
       return hasOther
@@ -208,7 +208,7 @@ export default function FormDetailPage() {
 
     if (selectedOption && (selectedOption as QuestionOption).key_name) {
       const hasOther =
-        (selectedOption as QuestionOption).key_name.startsWith("otra_") ||
+        (selectedOption as QuestionOption).key_name?.startsWith("otra_") ||
         (selectedOption as QuestionOption).key_name === "other"
       console.log(`Resultado para opción única:`, hasOther)
       return hasOther
@@ -284,6 +284,7 @@ export default function FormDetailPage() {
         patient_protocol_id: patientProtocolId,
         protocol_form_id: protocolFormId.toString(),
         scheduled_date: today,
+        completed_at: new Date().toISOString(),
       }
 
       console.log("Datos para crear instancia:", instanceData)
@@ -311,7 +312,7 @@ export default function FormDetailPage() {
                 // Si es la opción "otra_" o "other", usar el texto personalizado
                 if (
                   option &&
-                  (option.key_name.startsWith("otra_") || option.key_name === "other") &&
+                  (option.key_name?.startsWith("otra_") || option.key_name === "other") &&
                   otherResponses[question.id]
                 ) {
                   answerText = otherResponses[question.id]
@@ -321,7 +322,7 @@ export default function FormDetailPage() {
                   form_instance_id: createdInstance.id,
                   question_id: question.id,
                   answer_text: answerText,
-                  answer_option_id: answerOptionId,
+                  answer_option_id: answerOptionId ?? undefined,
                 }
 
                 console.log(`Enviando respuesta checkbox ${i + 1} para pregunta ${question.id}:`, responseData)
@@ -338,7 +339,7 @@ export default function FormDetailPage() {
               if (
                 selectedOption &&
                 !Array.isArray(selectedOption) &&
-                ((selectedOption as QuestionOption).key_name.startsWith("otra_") ||
+                ((selectedOption as QuestionOption).key_name?.startsWith("otra_") ||
                   (selectedOption as QuestionOption).key_name === "other") &&
                 otherResponses[question.id]
               ) {
@@ -349,7 +350,7 @@ export default function FormDetailPage() {
                 form_instance_id: createdInstance.id,
                 question_id: question.id,
                 answer_text: answerText,
-                answer_option_id: answerOptionId,
+                answer_option_id: answerOptionId ?? undefined,
               }
 
               console.log(`Enviando respuesta para pregunta ${question.id}:`, responseData)
@@ -361,7 +362,7 @@ export default function FormDetailPage() {
                 form_instance_id: createdInstance.id,
                 question_id: question.id,
                 answer_text: typeof response === "string" ? response : JSON.stringify(response),
-                answer_option_id: null,
+                answer_option_id: undefined,
               }
 
               console.log(`Enviando respuesta de texto libre para pregunta ${question.id}:`, responseData)
