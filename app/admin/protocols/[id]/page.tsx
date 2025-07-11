@@ -16,6 +16,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import Link from "next/link"
 import { protocolsApi, formsApi, patientsApi, patientProtocolsApi } from "@/lib/api"
 import { authUtils } from "@/lib/auth"
+import { config } from "@/lib/config"
 
 interface Form {
   id: number
@@ -252,20 +253,71 @@ export default function EditProtocolPage() {
       console.log("Actualizando formularios del protocolo:", formsData)
       await protocolsApi.updateProtocolForms(protocolId, formsData)
 
-      // Actualizar asignaciones de pacientes
+      // Actualizar asignaciones de pacientes usando el endpoint correcto
       if (activeTab === "patients") {
         const user = authUtils.getUser()
-        const userId = user?.id || 1
+        const userId = user?.id
 
-        const patientAssignments = selectedPatients.map((patientId) => ({
-          patient_id: patientId,
-          protocol_id: protocolId,
-          start_date: new Date().toISOString(),
-          assigned_by: userId,
-        }))
+        if (!userId) {
+          alert("Error: No se pudo obtener el ID del usuario logueado")
+          return
+        }
 
-        console.log("Actualizando asignaciones de pacientes:", patientAssignments)
-        await patientProtocolsApi.updatePatientProtocolAssignments(protocolId, patientAssignments)
+        // Obtener pacientes actualmente asignados
+        const currentlyAssignedIds = assignedPatients.map((p) => p.id)
+
+        // Pacientes a asignar (nuevos)
+        const patientsToAssign = selectedPatients.filter((id) => !currentlyAssignedIds.includes(id))
+
+        // Pacientes a desasignar (removidos)
+        const patientsToUnassign = currentlyAssignedIds.filter((id) => !selectedPatients.includes(id))
+
+        // Asignar nuevos pacientes usando POST /patient-protocols
+        for (const patientId of patientsToAssign) {
+          const assignData = {
+            patient_id: patientId,
+            protocol_id: protocolId,
+            start_date: new Date().toISOString().split("T")[0], // Fecha actual en formato YYYY-MM-DD
+            assigned_by: userId, // ID del usuario logueado
+          }
+
+          console.log("Asignando paciente:", assignData)
+
+          const assignResponse = await fetch(`${config.API_BASE_URL}/patient-protocols`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "ngrok-skip-browser-warning": "true",
+              Authorization: `Bearer ${localStorage.getItem(config.TOKEN_KEY)}`,
+            },
+            body: JSON.stringify(assignData),
+          })
+
+          if (!assignResponse.ok) {
+            const errorText = await assignResponse.text()
+            console.error(`Error asignando paciente ${patientId}:`, errorText)
+          }
+        }
+
+        // Desasignar pacientes removidos
+        for (const patientId of patientsToUnassign) {
+          const unassignResponse = await fetch(`${config.API_BASE_URL}/patient-protocols/eliminarPaciente`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "ngrok-skip-browser-warning": "true",
+              Authorization: `Bearer ${localStorage.getItem(config.TOKEN_KEY)}`,
+            },
+            body: JSON.stringify({
+              idPaciente: patientId,
+              idProtocolo: protocolId,
+            }),
+          })
+
+          if (!unassignResponse.ok) {
+            console.error(`Error desasignando paciente ${patientId}`)
+          }
+        }
       }
 
       console.log("Protocolo actualizado exitosamente")

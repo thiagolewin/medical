@@ -23,6 +23,7 @@ import {
 import Link from "next/link"
 import { nationalitiesApi } from "@/lib/api"
 import { config } from "@/lib/config"
+import { authUtils } from "@/lib/auth"
 
 interface PatientProtocol {
   id: number
@@ -68,7 +69,12 @@ export default function EditPatientPage() {
   const params = useParams()
   const patientId = Number.parseInt(params.id as string)
 
-  const [nationalities, setNationalities] = useState([])
+  const [nationalities, setNationalities] = useState<Array<{
+    id: number
+    key_name: string
+    name_es: string
+    name_en: string
+  }>>([])
   const [availableProtocols, setAvailableProtocols] = useState<Protocol[]>([])
   const [isLoadingNationalities, setIsLoadingNationalities] = useState(true)
   const [isLoadingPatient, setIsLoadingPatient] = useState(true)
@@ -88,7 +94,14 @@ export default function EditPatientPage() {
     phone: "",
   })
 
-  const [originalPatientProtocols, setOriginalPatientProtocols] = useState<PatientProtocol[]>([])
+  const [originalPatient, setOriginalPatient] = useState({
+    firstName: "",
+    lastName: "",
+    nationalityId: "",
+    dateOfBirth: "",
+    email: "",
+    phone: "",
+  })
   const [patientProtocols, setPatientProtocols] = useState<PatientProtocol[]>([])
   const [protocolForms, setProtocolForms] = useState<
     Record<number, { available: ProtocolForm[]; responded: ProtocolForm[] }>
@@ -122,6 +135,14 @@ export default function EditPatientPage() {
 
         const patientData = await patientResponse.json()
         setPatient({
+          firstName: patientData.first_name || "",
+          lastName: patientData.last_name || "",
+          nationalityId: patientData.nationality_id?.toString() || "",
+          dateOfBirth: patientData.date_of_birth ? patientData.date_of_birth.split("T")[0] : "",
+          email: patientData.email || "",
+          phone: patientData.phone || "",
+        })
+        setOriginalPatient({
           firstName: patientData.first_name || "",
           lastName: patientData.last_name || "",
           nationalityId: patientData.nationality_id?.toString() || "",
@@ -187,7 +208,7 @@ export default function EditPatientPage() {
         }
       } catch (error) {
         console.error("Error cargando datos:", error)
-        alert(`Error al cargar los datos del paciente: ${error.message}`)
+        alert(`Error al cargar los datos del paciente: ${error instanceof Error ? error.message : String(error)}`)
       } finally {
         setIsLoadingNationalities(false)
         setIsLoadingPatient(false)
@@ -218,8 +239,8 @@ export default function EditPatientPage() {
         console.log("Protocolos cargados:", protocols)
 
         // Filtrar protocolos que ya están asignados
-        const assignedProtocolIds = patientProtocols.map((p) => p.protocol_id)
-        const available = protocols.filter((p) => !assignedProtocolIds.includes(p.id))
+        const assignedProtocolIds = patientProtocols.map((p: PatientProtocol) => p.protocol_id)
+        const available = protocols.filter((p: Protocol) => !assignedProtocolIds.includes(p.id))
         console.log("Protocolos disponibles después del filtro:", available)
 
         setAvailableProtocols(available)
@@ -228,7 +249,7 @@ export default function EditPatientPage() {
       }
     } catch (error) {
       console.error("Error cargando protocolos disponibles:", error)
-      alert(`Error al cargar protocolos: ${error.message}`)
+      alert(`Error al cargar protocolos: ${error instanceof Error ? error.message : String(error)}`)
     } finally {
       setIsLoadingAvailableProtocols(false)
     }
@@ -343,15 +364,26 @@ export default function EditPatientPage() {
     setIsSaving(true)
 
     try {
+      // Convertir fecha de YYYY-MM-DD a DD/MM/YYYY
+      const formatDateForBackend = (dateString: string) => {
+        const date = new Date(dateString)
+        const day = date.getDate().toString().padStart(2, '0')
+        const month = (date.getMonth() + 1).toString().padStart(2, '0')
+        const year = date.getFullYear()
+        return `${day}/${month}/${year}`
+      }
+
       // 1. Actualizar datos del paciente
       const patientData = {
         first_name: patient.firstName,
         last_name: patient.lastName,
         nationality_id: Number.parseInt(patient.nationalityId),
-        date_of_birth: patient.dateOfBirth,
+        date_of_birth: formatDateForBackend(patient.dateOfBirth),
         email: patient.email,
         phone: patient.phone,
       }
+
+      console.log("Enviando datos del paciente:", patientData)
 
       const patientResponse = await fetch(`${config.API_BASE_URL}/patients/${patientId}`, {
         method: "PUT",
@@ -364,31 +396,58 @@ export default function EditPatientPage() {
       })
 
       if (!patientResponse.ok) {
-        throw new Error("Error al actualizar datos del paciente")
+        const errorText = await patientResponse.text()
+        console.error("Error response:", errorText)
+        throw new Error(`Error al actualizar datos del paciente: ${patientResponse.status} ${patientResponse.statusText}`)
       }
+
+      const updatedPatient = await patientResponse.json()
+      console.log("Paciente actualizado:", updatedPatient)
 
       // 2. Desasignar protocolos
       for (const protocolId of pendingChanges.protocolsToRemove) {
-        const unassignResponse = await fetch(`${config.API_BASE_URL}/patient-protocols/eliminarPaciente`, {
-          method: "POST",
+        console.log(`Desasignando protocolo ${protocolId} del paciente ${patientId}`)
+        
+        // Buscar el registro de asignación para obtener el ID correcto
+        const assignmentRecord = originalPatientProtocols.find(p => p.protocol_id === protocolId)
+        
+        if (!assignmentRecord) {
+          console.error(`No se encontró registro de asignación para protocolo ${protocolId}`)
+          continue
+        }
+
+        console.log(`Eliminando asignación con ID: ${assignmentRecord.id}`)
+        
+        const unassignResponse = await fetch(`${config.API_BASE_URL}/patient-protocols/${assignmentRecord.id}`, {
+          method: "DELETE",
           headers: {
-            "Content-Type": "application/json",
             "ngrok-skip-browser-warning": "true",
             Authorization: `Bearer ${localStorage.getItem("token")}`,
           },
-          body: JSON.stringify({
-            idPaciente: patientId,
-            idProtocolo: protocolId,
-          }),
         })
 
         if (!unassignResponse.ok) {
-          console.error(`Error desasignando protocolo ${protocolId}`)
+          const errorText = await unassignResponse.text()
+          console.error(`Error desasignando protocolo ${protocolId}:`, errorText)
+          throw new Error(`Error al desasignar protocolo ${protocolId}: ${unassignResponse.status} ${unassignResponse.statusText}`)
         }
+
+        console.log(`Protocolo ${protocolId} desasignado exitosamente`)
       }
 
       // 3. Asignar nuevos protocolos
       for (const protocolToAdd of pendingChanges.protocolsToAdd) {
+        console.log(`Asignando protocolo ${protocolToAdd.protocol_id} al paciente ${patientId}`)
+        
+        const assignData = {
+          patient_id: patientId,
+          protocol_id: protocolToAdd.protocol_id,
+          start_date: formatDateForBackend(protocolToAdd.start_date),
+          assigned_by: Number.parseInt(localStorage.getItem("userId") || "1"), // ID del usuario actual
+        }
+
+        console.log("Datos de asignación:", assignData)
+
         const assignResponse = await fetch(`${config.API_BASE_URL}/patient-protocols`, {
           method: "POST",
           headers: {
@@ -396,17 +455,17 @@ export default function EditPatientPage() {
             "ngrok-skip-browser-warning": "true",
             Authorization: `Bearer ${localStorage.getItem("token")}`,
           },
-          body: JSON.stringify({
-            patient_id: patientId,
-            protocol_id: protocolToAdd.protocol_id,
-            start_date: protocolToAdd.start_date,
-            assigned_by: Number.parseInt(localStorage.getItem("userId") || "1"), // ID del usuario actual
-          }),
+          body: JSON.stringify(assignData),
         })
 
         if (!assignResponse.ok) {
-          console.error(`Error asignando protocolo ${protocolToAdd.protocol_id}`)
+          const errorText = await assignResponse.text()
+          console.error(`Error asignando protocolo ${protocolToAdd.protocol_id}:`, errorText)
+          throw new Error(`Error al asignar protocolo ${protocolToAdd.protocol_id}: ${assignResponse.status} ${assignResponse.statusText}`)
         }
+
+        const assignedProtocol = await assignResponse.json()
+        console.log(`Protocolo ${protocolToAdd.protocol_id} asignado exitosamente:`, assignedProtocol)
       }
 
       // Limpiar cambios pendientes
@@ -421,7 +480,7 @@ export default function EditPatientPage() {
       window.location.reload()
     } catch (error) {
       console.error("Error guardando cambios:", error)
-      alert("Error al guardar los cambios. Por favor, inténtelo de nuevo.")
+      alert(`Error al guardar los cambios: ${error instanceof Error ? error.message : String(error)}`)
     } finally {
       setIsSaving(false)
     }
@@ -431,17 +490,12 @@ export default function EditPatientPage() {
     return (
       pendingChanges.protocolsToAdd.length > 0 ||
       pendingChanges.protocolsToRemove.length > 0 ||
-      JSON.stringify(patient) !==
-        JSON.stringify({
-          firstName: "",
-          lastName: "",
-          nationalityId: "",
-          dateOfBirth: "",
-          email: "",
-          phone: "",
-        })
+      JSON.stringify(patient) !== JSON.stringify(originalPatient)
     )
   }
+
+  const user = typeof window !== "undefined" ? authUtils.getUser() : null;
+  const isViewer = user?.role === "viewer";
 
   if (isLoadingPatient) {
     return (
@@ -468,19 +522,21 @@ export default function EditPatientPage() {
             <p className="text-muted-foreground">Modifique la información del paciente</p>
           </div>
         </div>
-        <Button onClick={saveAllChanges} disabled={isSaving}>
-          {isSaving ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Guardando...
-            </>
-          ) : (
-            <>
-              <Save className="mr-2 h-4 w-4" />
-              Guardar cambios
-            </>
-          )}
-        </Button>
+        { !isViewer && (
+          <Button onClick={saveAllChanges} disabled={isSaving}>
+            {isSaving ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Guardando...
+              </>
+            ) : (
+              <>
+                <Save className="mr-2 h-4 w-4" />
+                Guardar cambios
+              </>
+            )}
+          </Button>
+        )}
       </div>
 
       {/* Mostrar indicador de cambios pendientes */}
@@ -514,6 +570,7 @@ export default function EditPatientPage() {
                 onChange={handleInputChange}
                 placeholder="Ingrese el nombre"
                 required
+                disabled={isViewer}
               />
             </div>
             <div className="space-y-2">
@@ -527,6 +584,7 @@ export default function EditPatientPage() {
                 onChange={handleInputChange}
                 placeholder="Ingrese el apellido"
                 required
+                disabled={isViewer}
               />
             </div>
           </div>
@@ -539,7 +597,7 @@ export default function EditPatientPage() {
               <Select
                 value={patient.nationalityId}
                 onValueChange={(value) => handleSelectChange("nationalityId", value)}
-                disabled={isLoadingNationalities}
+                disabled={isLoadingNationalities || isViewer}
               >
                 <SelectTrigger id="nationalityId">
                   <SelectValue placeholder={isLoadingNationalities ? "Cargando..." : "Seleccione nacionalidad"} />
@@ -564,6 +622,7 @@ export default function EditPatientPage() {
                 value={patient.dateOfBirth}
                 onChange={handleInputChange}
                 required
+                disabled={isViewer}
               />
             </div>
           </div>
@@ -581,6 +640,7 @@ export default function EditPatientPage() {
                 onChange={handleInputChange}
                 placeholder="correo@ejemplo.com"
                 required
+                disabled={isViewer}
               />
             </div>
             <div className="space-y-2">
@@ -594,6 +654,7 @@ export default function EditPatientPage() {
                 onChange={handleInputChange}
                 placeholder="+54 11 1234-5678"
                 required
+                disabled={isViewer}
               />
             </div>
           </div>
@@ -619,6 +680,7 @@ export default function EditPatientPage() {
                     loadAvailableProtocols()
                     setShowAssignDialog(true)
                   }}
+                  disabled={isViewer}
                 >
                   <Plus className="h-4 w-4 mr-2" />
                   Asignar Protocolo
@@ -637,7 +699,7 @@ export default function EditPatientPage() {
                     <Select
                       value={selectedProtocolId}
                       onValueChange={setSelectedProtocolId}
-                      disabled={isLoadingAvailableProtocols}
+                      disabled={isLoadingAvailableProtocols || isViewer}
                     >
                       <SelectTrigger>
                         <SelectValue
@@ -672,6 +734,7 @@ export default function EditPatientPage() {
                       type="date"
                       value={startDate}
                       onChange={(e) => setStartDate(e.target.value)}
+                      disabled={isViewer}
                     />
                   </div>
                 </div>
@@ -681,7 +744,7 @@ export default function EditPatientPage() {
                   </Button>
                   <Button
                     onClick={handleAssignProtocol}
-                    disabled={!selectedProtocolId || !startDate || isLoadingAvailableProtocols}
+                    disabled={!selectedProtocolId || !startDate || isLoadingAvailableProtocols || isViewer}
                   >
                     Asignar
                   </Button>
@@ -742,7 +805,7 @@ export default function EditPatientPage() {
                           variant="destructive"
                           size="sm"
                           onClick={() => handleUnassignProtocol(protocol.protocol_id)}
-                          disabled={isToBeRemoved}
+                          disabled={isToBeRemoved || isViewer}
                         >
                           <X className="h-4 w-4 mr-1" />
                           {isToBeRemoved ? "Eliminado" : "Desasignar"}
@@ -834,19 +897,21 @@ export default function EditPatientPage() {
         <Link href="/admin/patients">
           <Button variant="outline">Cancelar</Button>
         </Link>
-        <Button onClick={saveAllChanges} disabled={isSaving}>
-          {isSaving ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Guardando...
-            </>
-          ) : (
-            <>
-              <Save className="mr-2 h-4 w-4" />
-              Guardar cambios
-            </>
-          )}
-        </Button>
+        { !isViewer && (
+          <Button onClick={saveAllChanges} disabled={isSaving}>
+            {isSaving ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Guardando...
+              </>
+            ) : (
+              <>
+                <Save className="mr-2 h-4 w-4" />
+                Guardar cambios
+              </>
+            )}
+          </Button>
+        )}
       </div>
     </div>
   )

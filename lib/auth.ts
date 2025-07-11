@@ -171,4 +171,16 @@ export const authUtils = {
     const user = authUtils.getUser()
     return user?.role === "admin"
   },
+
+  // Verificar si el usuario puede crear/modificar datos
+  canModifyData: (): boolean => {
+    const user = authUtils.getUser()
+    return user?.role === "admin"
+  },
+
+  // Verificar si el usuario puede ver datos
+  canViewData: (): boolean => {
+    const user = authUtils.getUser()
+    return user?.role === "admin" || user?.role === "editor" || user?.role === "viewer"
+  },
 }

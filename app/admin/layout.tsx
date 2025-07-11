@@ -4,7 +4,7 @@ import type React from "react"
 import { useState, useEffect } from "react"
 import { useRouter, usePathname } from "next/navigation"
 import Link from "next/link"
-import { LayoutDashboard, FileText, ClipboardList, Users, LogOut, Menu, BarChart3 } from "lucide-react"
+import { LayoutDashboard, FileText, ClipboardList, Users, LogOut, Menu, BarChart3, UserCog } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent } from "@/components/ui/sheet"
 import { cn } from "@/lib/utils"
@@ -41,6 +41,8 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     return null // Evitar renderizado en el servidor
   }
 
+  const isAdmin = authUtils.isAdmin()
+
   const navigation = [
     {
       name: language === "es" ? "Dashboard" : "Dashboard",
@@ -67,6 +69,15 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
       href: "/admin/analysis",
       icon: BarChart3,
     },
+    ...(isAdmin
+      ? [
+          {
+            name: language === "es" ? "Usuarios" : "Users",
+            href: "/admin/users",
+            icon: UserCog,
+          },
+        ]
+      : []),
   ]
 
   return (
@@ -117,7 +128,12 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
 
       {/* Sidebar móvil */}
       <div className="md:hidden">
-        <Button variant="outline" size="icon" className="fixed top-4 left-4 z-40" onClick={() => setIsOpen(true)}>
+        <Button
+          variant="outline"
+          size="icon"
+          className="fixed top-4 left-4 z-40 bg-transparent"
+          onClick={() => setIsOpen(true)}
+        >
           <Menu className="h-5 w-5" />
           <span className="sr-only">{language === "es" ? "Abrir menú" : "Open menu"}</span>
         </Button>

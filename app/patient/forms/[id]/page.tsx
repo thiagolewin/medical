@@ -131,8 +131,8 @@ export default function FormDetailPage() {
       [questionId]: option.text_es, // Siempre usar texto en español
     }))
 
-    // Si no es la opción "otra_", limpiar el texto adicional
-    if (!option.key_name.startsWith("otra_")) {
+    // Si no es la opción "otra_" o "other", limpiar el texto adicional
+    if (!option.key_name?.startsWith("otra_") && option.key_name !== "other") {
       setOtherResponses((prev) => ({
         ...prev,
         [questionId]: "",
@@ -161,8 +161,8 @@ export default function FormDetailPage() {
         ? currentOptions.filter((opt: QuestionOption) => opt.id !== option.id)
         : []
 
-      // Si es la opción "otra_", limpiar el texto adicional
-      if (option.key_name.startsWith("otra_")) {
+      // Si es la opción "otra_" o "other", limpiar el texto adicional
+      if (option.key_name?.startsWith("otra_") || option.key_name === "other") {
         setOtherResponses((prev) => ({
           ...prev,
           [questionId]: "",
@@ -195,15 +195,21 @@ export default function FormDetailPage() {
 
     if (Array.isArray(selectedOption)) {
       const hasOther = selectedOption.some((opt: QuestionOption) => {
-        console.log(`Verificando opción en array:`, opt.key_name, opt.key_name.startsWith("otra_"))
-        return opt.key_name.startsWith("otra_")
+        console.log(
+          `Verificando opción en array:`,
+          opt.key_name,
+          opt.key_name?.startsWith("otra_") || opt.key_name === "other",
+        )
+        return opt.key_name?.startsWith("otra_") || opt.key_name === "other"
       })
       console.log(`Resultado para array:`, hasOther)
       return hasOther
     }
 
     if (selectedOption && (selectedOption as QuestionOption).key_name) {
-      const hasOther = (selectedOption as QuestionOption).key_name.startsWith("otra_")
+      const hasOther =
+        (selectedOption as QuestionOption).key_name?.startsWith("otra_") ||
+        (selectedOption as QuestionOption).key_name === "other"
       console.log(`Resultado para opción única:`, hasOther)
       return hasOther
     }
@@ -248,7 +254,7 @@ export default function FormDetailPage() {
         return responses[question.id].length === 0
       }
 
-      // Para preguntas con opción "otra_" seleccionada, verificar que tenga texto
+      // Para preguntas con opción "otra_" o "other" seleccionada, verificar que tenga texto
       if (isOtherSelected(question.id) && (!otherResponses[question.id] || otherResponses[question.id].trim() === "")) {
         return true
       }
@@ -278,6 +284,7 @@ export default function FormDetailPage() {
         patient_protocol_id: patientProtocolId,
         protocol_form_id: protocolFormId.toString(),
         scheduled_date: today,
+        completed_at: new Date().toISOString(),
       }
 
       console.log("Datos para crear instancia:", instanceData)
@@ -302,8 +309,12 @@ export default function FormDetailPage() {
                 let answerText = optionText
                 const answerOptionId = option ? option.id : null
 
-                // Si es la opción "otra_", usar el texto personalizado
-                if (option && option.key_name.startsWith("otra_") && otherResponses[question.id]) {
+                // Si es la opción "otra_" o "other", usar el texto personalizado
+                if (
+                  option &&
+                  (option.key_name?.startsWith("otra_") || option.key_name === "other") &&
+                  otherResponses[question.id]
+                ) {
                   answerText = otherResponses[question.id]
                 }
 
@@ -311,7 +322,7 @@ export default function FormDetailPage() {
                   form_instance_id: createdInstance.id,
                   question_id: question.id,
                   answer_text: answerText,
-                  answer_option_id: answerOptionId,
+                  answer_option_id: answerOptionId ?? undefined,
                 }
 
                 console.log(`Enviando respuesta checkbox ${i + 1} para pregunta ${question.id}:`, responseData)
@@ -324,11 +335,12 @@ export default function FormDetailPage() {
               const answerOptionId =
                 selectedOption && !Array.isArray(selectedOption) ? (selectedOption as QuestionOption).id : null
 
-              // Si es la opción "otra_", usar el texto personalizado
+              // Si es la opción "otra_" o "other", usar el texto personalizado
               if (
                 selectedOption &&
                 !Array.isArray(selectedOption) &&
-                (selectedOption as QuestionOption).key_name.startsWith("otra_") &&
+                ((selectedOption as QuestionOption).key_name?.startsWith("otra_") ||
+                  (selectedOption as QuestionOption).key_name === "other") &&
                 otherResponses[question.id]
               ) {
                 answerText = otherResponses[question.id]
@@ -338,7 +350,7 @@ export default function FormDetailPage() {
                 form_instance_id: createdInstance.id,
                 question_id: question.id,
                 answer_text: answerText,
-                answer_option_id: answerOptionId,
+                answer_option_id: answerOptionId ?? undefined,
               }
 
               console.log(`Enviando respuesta para pregunta ${question.id}:`, responseData)
@@ -350,7 +362,7 @@ export default function FormDetailPage() {
                 form_instance_id: createdInstance.id,
                 question_id: question.id,
                 answer_text: typeof response === "string" ? response : JSON.stringify(response),
-                answer_option_id: null,
+                answer_option_id: undefined,
               }
 
               console.log(`Enviando respuesta de texto libre para pregunta ${question.id}:`, responseData)
@@ -417,7 +429,7 @@ export default function FormDetailPage() {
               })}
             </RadioGroup>
 
-            {/* Campo de texto para "otra_" en radio */}
+            {/* Campo de texto para "otra_" o "other" en radio */}
             {isOtherSelected(question.id) && (
               <div className="ml-6 mt-3 p-3 border-l-2 border-blue-200 bg-blue-50/50">
                 <Label htmlFor={`other-${question.id}`} className="text-sm mb-2 block font-medium">
@@ -458,7 +470,7 @@ export default function FormDetailPage() {
               })}
             </div>
 
-            {/* Campo de texto para "otra_" en checkbox */}
+            {/* Campo de texto para "otra_" o "other" en checkbox */}
             {isOtherSelected(question.id) && (
               <div className="ml-6 mt-3 p-3 border-l-2 border-blue-200 bg-blue-50/50">
                 <Label htmlFor={`other-checkbox-${question.id}`} className="text-sm mb-2 block font-medium">
@@ -505,7 +517,7 @@ export default function FormDetailPage() {
               </SelectContent>
             </Select>
 
-            {/* Campo de texto para "otra_" en dropdown */}
+            {/* Campo de texto para "otra_" o "other" en dropdown */}
             {isOtherSelected(question.id) && (
               <div className="mt-3 p-3 border-l-2 border-blue-200 bg-blue-50/50">
                 <Label htmlFor={`other-dropdown-${question.id}`} className="text-sm mb-2 block font-medium">
@@ -651,9 +663,10 @@ export default function FormDetailPage() {
           <CardContent className="space-y-6">
             {questions
               .sort((a, b) => a.order_in_form - b.order_in_form)
-              .map((question) => (
+              .map((question, index) => (
                 <div key={question.id} className="space-y-3 border-b border-gray-100 pb-6 last:border-b-0 last:pb-0">
                   <Label className="text-sm sm:text-base font-medium leading-relaxed block">
+                    <span className="text-blue-600 font-semibold mr-2">{index + 1}.</span>
                     {language === "es" ? question.text_es : question.text_en}
                     {question.is_required && <span className="text-red-500 ml-1">*</span>}
                   </Label>

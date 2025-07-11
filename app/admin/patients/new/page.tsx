@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import Link from "next/link"
 import { nationalitiesApi } from "@/lib/api"
 import { config } from "@/lib/config"
+import { authUtils } from "@/lib/auth"
 
 export default function NewPatientPage() {
   const router = useRouter()
@@ -29,6 +30,9 @@ export default function NewPatientPage() {
     email: "",
     phone: "",
   })
+
+  const user = typeof window !== "undefined" ? authUtils.getUser() : null;
+  const isViewer = user?.role === "viewer";
 
   useEffect(() => {
     const fetchNationalities = async () => {
@@ -142,20 +146,29 @@ export default function NewPatientPage() {
             <p className="text-muted-foreground">Registre un nuevo paciente en el sistema</p>
           </div>
         </div>
-        <Button onClick={savePatient} disabled={isSaving}>
-          {isSaving ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Guardando...
-            </>
-          ) : (
-            <>
-              <Save className="mr-2 h-4 w-4" />
-              Guardar paciente
-            </>
-          )}
-        </Button>
+        { !isViewer && (
+          <Button onClick={savePatient} disabled={isSaving}>
+            {isSaving ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Guardando...
+              </>
+            ) : (
+              <>
+                <Save className="mr-2 h-4 w-4" />
+                Guardar paciente
+              </>
+            )}
+          </Button>
+        )}
       </div>
+
+      { isViewer && (
+        <div className="bg-yellow-100 border border-yellow-200 rounded-lg p-4">
+          <h4 className="text-sm font-medium text-yellow-900 mb-2">Atención</h4>
+          <p className="text-sm text-yellow-800">No tiene permisos para crear pacientes.</p>
+        </div>
+      )}
 
       <Card>
         <CardHeader>
@@ -175,6 +188,7 @@ export default function NewPatientPage() {
                 onChange={handleInputChange}
                 placeholder="Ingrese el nombre"
                 required
+                disabled={isViewer}
               />
             </div>
             <div className="space-y-2">
@@ -188,6 +202,7 @@ export default function NewPatientPage() {
                 onChange={handleInputChange}
                 placeholder="Ingrese el apellido"
                 required
+                disabled={isViewer}
               />
             </div>
           </div>
@@ -204,6 +219,7 @@ export default function NewPatientPage() {
                 onChange={handleInputChange}
                 placeholder="Ingrese el nombre de usuario"
                 required
+                disabled={isViewer}
               />
             </div>
             <div className="space-y-2">
@@ -218,6 +234,7 @@ export default function NewPatientPage() {
                 onChange={handleInputChange}
                 placeholder="Ingrese la contraseña"
                 required
+                disabled={isViewer}
               />
             </div>
           </div>
@@ -230,7 +247,7 @@ export default function NewPatientPage() {
               <Select
                 value={patient.nationalityId}
                 onValueChange={(value) => handleSelectChange("nationalityId", value)}
-                disabled={isLoadingNationalities}
+                disabled={isLoadingNationalities || isViewer}
               >
                 <SelectTrigger id="nationalityId">
                   <SelectValue placeholder={isLoadingNationalities ? "Cargando..." : "Seleccione nacionalidad"} />
@@ -255,6 +272,7 @@ export default function NewPatientPage() {
                 value={patient.dateOfBirth}
                 onChange={handleInputChange}
                 required
+                disabled={isViewer}
               />
             </div>
           </div>
@@ -272,6 +290,7 @@ export default function NewPatientPage() {
                 onChange={handleInputChange}
                 placeholder="correo@ejemplo.com"
                 required
+                disabled={isViewer}
               />
             </div>
             <div className="space-y-2">
@@ -285,6 +304,7 @@ export default function NewPatientPage() {
                 onChange={handleInputChange}
                 placeholder="+54 11 1234-5678"
                 required
+                disabled={isViewer}
               />
             </div>
           </div>
@@ -306,19 +326,21 @@ export default function NewPatientPage() {
         <Link href="/admin/patients">
           <Button variant="outline">Cancelar</Button>
         </Link>
-        <Button onClick={savePatient} disabled={isSaving}>
-          {isSaving ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Guardando...
-            </>
-          ) : (
-            <>
-              <Save className="mr-2 h-4 w-4" />
-              Guardar paciente
-            </>
-          )}
-        </Button>
+        { !isViewer && (
+          <Button onClick={savePatient} disabled={isSaving}>
+            {isSaving ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Guardando...
+              </>
+            ) : (
+              <>
+                <Save className="mr-2 h-4 w-4" />
+                Guardar paciente
+              </>
+            )}
+          </Button>
+        )}
       </div>
     </div>
   )
