@@ -23,6 +23,7 @@ interface Protocol {
 
 interface Form {
   id: number
+  form_id: number
   key_name: string
   name_es: string
   name_en: string
@@ -54,11 +55,10 @@ interface QuestionType {
   name_en: string
 }
 
+// 1. Estado de los filtros
 interface FilterCondition {
-  questionId: number
-  operator: string
-  value: string | string[]
-  customText?: string
+  questionId: number;
+  value: string; // id de la opción seleccionada como string, o "" si nada seleccionado
 }
 
 interface AnalysisResult {
@@ -103,15 +103,13 @@ export default function AnalysisPage() {
   // Textos traducidos
   const t = {
     title: language === "es" ? "Análisis de Datos" : "Data Analysis",
-    subtitle:
-      language === "es"
-        ? "Analice y filtre los datos de respuestas de pacientes. Los filtros y campos son opcionales."
-        : "Analyze and filter patient response data. Filters and fields are optional.",
+    subtitle: language === "es"
+      ? "Analice y filtre los datos de respuestas de pacientes. Los filtros y campos son opcionales."
+      : "Analyze and filter patient response data. Filters and fields are optional.",
     flexibleQueries: language === "es" ? "Consultas flexibles:" : "Flexible queries:",
-    flexibleQueriesDesc:
-      language === "es"
-        ? "Puede ejecutar consultas sin filtros ni campos específicos para obtener todos los datos disponibles."
-        : "You can execute queries without filters or specific fields to get all available data.",
+    flexibleQueriesDesc: language === "es"
+      ? "Puede ejecutar consultas sin filtros ni campos específicos para obtener todos los datos disponibles."
+      : "You can run queries without filters or specific fields to get all available data.",
     dataSelection: language === "es" ? "Selección de Datos" : "Data Selection",
     protocolOptional: language === "es" ? "Protocolo (Opcional)" : "Protocol (Optional)",
     formOptional: language === "es" ? "Formulario (Opcional)" : "Form (Optional)",
@@ -121,41 +119,30 @@ export default function AnalysisPage() {
     allForms: language === "es" ? "Todos los formularios" : "All forms",
     responseFilters: language === "es" ? "Filtros de Respuestas (Opcional)" : "Response Filters (Optional)",
     addFilter: language === "es" ? "Agregar Filtro" : "Add Filter",
-    noFiltersConfigured:
-      language === "es"
-        ? "No hay filtros configurados. Los filtros son opcionales - puede ejecutar consultas sin filtros."
-        : "No filters configured. Filters are optional - you can run queries without filters.",
+    noFiltersConfigured: language === "es"
+      ? "No hay filtros configurados. Los filtros son opcionales - puede ejecutar consultas sin filtros."
+      : "No filters configured. Filters are optional - you can run queries without filters.",
     filter: language === "es" ? "Filtro" : "Filter",
     remove: language === "es" ? "Eliminar" : "Remove",
     question: language === "es" ? "Pregunta" : "Question",
-    operator: language === "es" ? "Operador" : "Operator",
     value: language === "es" ? "Valor" : "Value",
-    equals: language === "es" ? "Igual a" : "Equals",
-    contains: language === "es" ? "Contiene" : "Contains",
-    greaterThan: language === "es" ? "Mayor que" : "Greater than",
-    lessThan: language === "es" ? "Menor que" : "Less than",
     select: language === "es" ? "Seleccionar..." : "Select...",
-    specify: language === "es" ? "Especificar..." : "Specify...",
-    notSpecified: language === "es" ? "Sin especificar" : "Not specified",
     enterValue: language === "es" ? "Ingrese valor..." : "Enter value...",
     type: language === "es" ? "Tipo: " : "Type: ",
     resultFields: language === "es" ? "Campos de Resultado (Opcional)" : "Result Fields (Optional)",
-    selectFormToSeeQuestions:
-      language === "es"
-        ? "Seleccione un formulario para ver las preguntas disponibles. Los campos son opcionales."
-        : "Select a form to see available questions. Fields are optional.",
-    selectQuestionsForResults:
-      language === "es"
-        ? "Seleccione las preguntas que desea incluir en los resultados. Si no selecciona ninguna, se mostrarán todas."
-        : "Select the questions you want to include in the results. If none selected, all will be shown.",
+    selectFormToSeeQuestions: language === "es"
+      ? "Seleccione un formulario para ver las preguntas disponibles. Los campos son opcionales."
+      : "Select a form to see available questions. Fields are optional.",
+    selectQuestionsForResults: language === "es"
+      ? "Seleccione las preguntas que desea incluir en los resultados. Si no selecciona ninguna, se mostrarán todas."
+      : "Select the questions you want to include in the results. If none selected, all will be shown.",
     analyzing: language === "es" ? "Analizando..." : "Analyzing...",
-    executeAnalysis: language === "es" ? "Ejecutar Análisis" : "Execute Analysis",
+    executeAnalysis: language === "es" ? "Ejecutar Análisis" : "Run Analysis",
     analysisResults: language === "es" ? "Resultados del Análisis" : "Analysis Results",
     exportCSV: language === "es" ? "Exportar CSV" : "Export CSV",
-    noResultsFound:
-      language === "es"
-        ? "No se encontraron resultados para los criterios especificados."
-        : "No results found for the specified criteria.",
+    noResultsFound: language === "es"
+      ? "No se encontraron resultados para los criterios especificados."
+      : "No results found for the specified criteria.",
     records: language === "es" ? "Registros" : "Records",
     uniquePatients: language === "es" ? "Pacientes únicos" : "Unique patients",
     uniqueQuestions: language === "es" ? "Preguntas únicas" : "Unique questions",
@@ -165,7 +152,7 @@ export default function AnalysisPage() {
     instanceId: language === "es" ? "ID Instancia" : "Instance ID",
     total: language === "es" ? "Total" : "Total",
     loading: language === "es" ? "Cargando..." : "Loading...",
-    errorExecutingAnalysis: language === "es" ? "Error al ejecutar el análisis" : "Error executing analysis",
+    errorExecutingAnalysis: language === "es" ? "Error al ejecutar el análisis" : "Error running analysis",
     errorLoadingData: language === "es" ? "Error al cargar datos" : "Error loading data",
   }
 
@@ -236,7 +223,8 @@ export default function AnalysisPage() {
           try {
             const formDetails = await formsApi.getForm(pf.form_id)
             return {
-              id: pf.form_id,
+              id: pf.id, // Usar el id único de la asignación
+              form_id: pf.form_id, // Agregar el form_id base
               key_name: formDetails.key_name || `form_${pf.form_id}`,
               name_es: pf.form_name_es || formDetails.name_es,
               name_en: pf.form_name_en || formDetails.name_en,
@@ -245,7 +233,8 @@ export default function AnalysisPage() {
           } catch (error) {
             console.error(`Error loading form details for form ${pf.form_id}:`, error)
             return {
-              id: pf.form_id,
+              id: pf.id, // Usar el id único de la asignación
+              form_id: pf.form_id, // Agregar el form_id base
               key_name: `form_${pf.form_id}`,
               name_es: pf.form_name_es,
               name_en: pf.form_name_en,
@@ -300,25 +289,22 @@ export default function AnalysisPage() {
 
     const newCondition: FilterCondition = {
       questionId: questions[0].id,
-      operator: "equals",
       value: "",
     }
 
     setFilterConditions([...filterConditions, newCondition])
   }
 
+  // 3. updateFilterCondition simplificado
   const updateFilterCondition = (index: number, field: keyof FilterCondition, value: any) => {
-    const updated = [...filterConditions]
-    updated[index] = { ...updated[index], [field]: value }
-
-    // Si cambia la pregunta, resetear el valor
+    const updated = [...filterConditions];
+    updated[index] = { ...updated[index], [field]: value };
+    // Si cambia la pregunta, limpiar el valor
     if (field === "questionId") {
-      updated[index].value = ""
-      updated[index].customText = ""
+      updated[index].value = "";
     }
-
-    setFilterConditions(updated)
-  }
+    setFilterConditions(updated);
+  };
 
   const removeFilterCondition = (index: number) => {
     setFilterConditions(filterConditions.filter((_, i) => i !== index))
@@ -359,80 +345,41 @@ export default function AnalysisPage() {
     return option.key_name === "other" || option.key_name.startsWith("otra_")
   }
 
+  // 4. Al enviar el análisis, armar el payload con el texto de la opción seleccionada
   const executeAnalysis = async () => {
     try {
-      setIsLoading(true)
-      setHasSearched(true)
-      setError("")
-
-      // Preparar payload según el formato esperado por el backend
-      const filtros: any[] = []
-
+      setIsLoading(true);
+      setHasSearched(true);
+      setError("");
+      const filtros: any[] = [];
       filterConditions.forEach((condition) => {
-        const question = questions.find((q) => q.id === condition.questionId)
-
-        if (Array.isArray(condition.value)) {
-          // Múltiples valores
-          condition.value.forEach((val) => {
-            const option = question?.options?.find((opt) => opt.id === Number(val))
-            let answerText = val
-
-            if (option) {
-              if (isOtherOption(option) && condition.customText) {
-                answerText = condition.customText
-              } else {
-                answerText = language === "es" ? option.text_es : option.text_en
-              }
-            }
-
-            filtros.push({
-              idForm: question?.form_id || 0,
-              idProtocolo: selectedProtocol !== "all" ? Number(selectedProtocol) : 0,
-              idPregunta: condition.questionId,
-              anwerText: answerText,
-            })
-          })
-        } else {
-          // Valor único
-          const option = question?.options?.find((opt) => opt.id === Number(condition.value))
-          let answerText = condition.value as string
-
+        const question = questions.find((q) => q.id === condition.questionId);
+        let answerText = "";
+        if (question && question.options && condition.value) {
+          const option = question.options.find((opt) => opt.id.toString() === condition.value);
           if (option) {
-            if (isOtherOption(option) && condition.customText) {
-              answerText = condition.customText
-            } else {
-              answerText = language === "es" ? option.text_es : option.text_en
-            }
+            answerText = language === "es" ? option.text_es : option.text_en;
           }
-
-          filtros.push({
-            idForm: question?.form_id || 0,
-            idProtocolo: selectedProtocol !== "all" ? Number(selectedProtocol) : 0,
-            idPregunta: condition.questionId,
-            anwerText: answerText,
-          })
         }
-      })
-
-      // Si no hay campos de resultado seleccionados, enviar array vacío
-      const traer = selectedResultFields.length > 0 ? selectedResultFields : []
-
-      const payload = {
-        filtros: filtros, // Array de filtros (puede estar vacío)
-        traer: traer, // Array de question IDs (puede estar vacío)
-      }
-
-      console.log("Executing analysis with payload:", payload)
-
-      const analysisResults = await analysisApi.executeAnalysis(payload)
-      setResults(analysisResults || [])
+        filtros.push({
+          idForm: question?.form_id || 0,
+          idProtocolo: selectedProtocol !== "all" ? Number(selectedProtocol) : 0,
+          idPregunta: condition.questionId,
+          anwerText: answerText,
+        });
+      });
+      const traer = selectedResultFields.length > 0 ? selectedResultFields : [];
+      const payload = { filtros, traer };
+      console.log("[ANALYSIS] Payload enviado:", payload);
+      const analysisResults = await analysisApi.executeAnalysis(payload);
+      setResults(analysisResults || []);
     } catch (error) {
-      console.error("Error executing analysis:", error)
-      setError(`${t.errorExecutingAnalysis}: ${error}`)
+      console.error("Error executing analysis:", error);
+      setError(`${t.errorExecutingAnalysis}: ${error}`);
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   const exportToCSV = () => {
     if (results.length === 0) return
@@ -560,7 +507,7 @@ export default function AnalysisPage() {
                   <SelectContent>
                     <SelectItem value="all">{t.allForms}</SelectItem>
                     {forms.map((form) => (
-                      <SelectItem key={form.id} value={form.id.toString()}>
+                      <SelectItem key={`form-${form.id}`} value={form.form_id.toString()}>
                         {language === "es" ? form.name_es : form.name_en}
                       </SelectItem>
                     ))}
@@ -597,9 +544,7 @@ export default function AnalysisPage() {
           ) : (
             <div className="space-y-4">
               {filterConditions.map((condition, index) => {
-                const question = questions.find((q) => q.id === condition.questionId)
-                const questionType = question ? getQuestionType(question.question_type_id) : null
-
+                const question = questions.find((q) => q.id === condition.questionId);
                 return (
                   <div key={index} className="border rounded-lg p-4 space-y-3">
                     <div className="flex items-center justify-between">
@@ -610,180 +555,46 @@ export default function AnalysisPage() {
                         {t.remove}
                       </Button>
                     </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                      {/* Selección de pregunta */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {/* Pregunta */}
                       <div>
                         <Label className="text-sm">{t.question}</Label>
                         <Select
                           value={condition.questionId.toString()}
                           onValueChange={(value) => updateFilterCondition(index, "questionId", Number(value))}
                         >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
                           <SelectContent>
                             {questions.map((q) => (
-                              <SelectItem key={q.id} value={q.id.toString()}>
-                                {language === "es" ? q.text_es : q.text_en}
-                              </SelectItem>
+                              <SelectItem key={q.id} value={q.id.toString()}>{language === "es" ? q.text_es : q.text_en}</SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
                       </div>
-
-                      {/* Operador */}
-                      <div>
-                        <Label className="text-sm">{t.operator}</Label>
-                        <Select
-                          value={condition.operator}
-                          onValueChange={(value) => updateFilterCondition(index, "operator", value)}
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="equals">{t.equals}</SelectItem>
-                            <SelectItem value="contains">{t.contains}</SelectItem>
-                            {isNumericQuestion(question?.question_type_id || 0) && (
-                              <>
-                                <SelectItem value="greater_than">{t.greaterThan}</SelectItem>
-                                <SelectItem value="less_than">{t.lessThan}</SelectItem>
-                              </>
-                            )}
-                          </SelectContent>
-                        </Select>
-                      </div>
-
                       {/* Valor */}
                       <div>
                         <Label className="text-sm">{t.value}</Label>
-                        {question && hasOptions(question.question_type_id) ? (
-                          <div className="space-y-2">
-                            {isMultipleChoice(question.question_type_id) ? (
-                              // Múltiple selección
-                              <div className="border rounded p-2 max-h-32 overflow-y-auto">
-                                {question.options?.map((option) => {
-                                  const isSelected =
-                                    Array.isArray(condition.value) && condition.value.includes(option.id.toString())
-                                  const isOther = isOtherOption(option)
-
-                                  return (
-                                    <div key={option.id} className="space-y-2">
-                                      <div className="flex items-center space-x-2">
-                                        <Checkbox
-                                          checked={isSelected}
-                                          onCheckedChange={(checked) => {
-                                            const currentValues = Array.isArray(condition.value) ? condition.value : []
-                                            const newValues = checked
-                                              ? [...currentValues, option.id.toString()]
-                                              : currentValues.filter((v) => v !== option.id.toString())
-                                            updateFilterCondition(index, "value", newValues)
-
-                                            // Si se deselecciona una opción "Otra", limpiar el texto
-                                            if (!checked && isOther) {
-                                              updateFilterCondition(index, "customText", "")
-                                            }
-                                          }}
-                                        />
-                                        <span className="text-sm">
-                                          {language === "es" ? option.text_es : option.text_en}
-                                        </span>
-                                        {isOther && isSelected && (
-                                          <Badge variant="secondary" className="text-xs">
-                                            {condition.customText || t.notSpecified}
-                                          </Badge>
-                                        )}
-                                      </div>
-
-                                      {/* Input para "Otra" */}
-                                      {isOther && isSelected && (
-                                        <div className="ml-6">
-                                          <Input
-                                            placeholder={t.specify}
-                                            value={condition.customText || ""}
-                                            onChange={(e) => updateFilterCondition(index, "customText", e.target.value)}
-                                            className="text-sm"
-                                          />
-                                        </div>
-                                      )}
-                                    </div>
-                                  )
-                                })}
-                              </div>
-                            ) : (
-                              // Selección única
-                              <div className="space-y-2">
-                                <Select
-                                  value={condition.value as string}
-                                  onValueChange={(value) => {
-                                    updateFilterCondition(index, "value", value)
-                                    // Si no es una opción "Otra", limpiar el texto personalizado
-                                    const selectedOption = question.options?.find((opt) => opt.id.toString() === value)
-                                    if (!selectedOption || !isOtherOption(selectedOption)) {
-                                      updateFilterCondition(index, "customText", "")
-                                    }
-                                  }}
-                                >
-                                  <SelectTrigger>
-                                    <SelectValue placeholder={t.select} />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {question.options?.map((option) => (
-                                      <SelectItem key={option.id} value={option.id.toString()}>
-                                        {language === "es" ? option.text_es : option.text_en}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-
-                                {/* Input para "Otra" en selección única */}
-                                {(() => {
-                                  const selectedOption = question.options?.find(
-                                    (opt) => opt.id.toString() === condition.value,
-                                  )
-                                  return (
-                                    selectedOption &&
-                                    isOtherOption(selectedOption) && (
-                                      <div className="mt-2">
-                                        <Input
-                                          placeholder={t.specify}
-                                          value={condition.customText || ""}
-                                          onChange={(e) => updateFilterCondition(index, "customText", e.target.value)}
-                                          className="text-sm"
-                                        />
-                                        {condition.customText && (
-                                          <Badge variant="secondary" className="text-xs mt-1">
-                                            {condition.customText}
-                                          </Badge>
-                                        )}
-                                      </div>
-                                    )
-                                  )
-                                })()}
-                              </div>
-                            )}
-                          </div>
+                        {question && question.options && question.options.length > 0 ? (
+                          <Select
+                            value={condition.value}
+                            onValueChange={(value) => updateFilterCondition(index, "value", value)}
+                          >
+                            <SelectTrigger><SelectValue placeholder={t.select} /></SelectTrigger>
+                            <SelectContent>
+                              {question.options.map((option) => (
+                                <SelectItem key={option.id} value={option.id.toString()}>
+                                  {language === "es" ? option.text_es : option.text_en}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                         ) : (
-                          // Input de texto para preguntas sin opciones
-                          <Input
-                            value={condition.value as string}
-                            onChange={(e) => updateFilterCondition(index, "value", e.target.value)}
-                            placeholder={t.enterValue}
-                          />
+                          <Input value="" disabled placeholder={t.select} />
                         )}
                       </div>
                     </div>
-
-                    {/* Mostrar tipo de pregunta */}
-                    {questionType && (
-                      <div className="text-xs text-gray-500">
-                        {t.type}
-                        {language === "es" ? questionType.name_es : questionType.name_en}
-                      </div>
-                    )}
                   </div>
-                )
+                );
               })}
             </div>
           )}

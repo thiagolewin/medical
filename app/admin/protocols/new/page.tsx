@@ -15,6 +15,9 @@ import Link from "next/link"
 import { protocolsApi, formsApi, patientsApi, patientProtocolsApi } from "@/lib/api"
 import { authUtils } from "@/lib/auth"
 import { Checkbox } from "@/components/ui/checkbox"
+import { DndContext, closestCenter } from '@dnd-kit/core';
+import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 interface Form {
   id: number
@@ -110,10 +113,7 @@ export default function NewProtocolPage() {
   }, [currentStep])
 
   // Obtener formularios disponibles (que no estén ya seleccionados)
-  const getAvailableForms = () => {
-    const selectedFormIds = protocolForms.map((pf) => pf.formId)
-    return availableForms.filter((form) => !selectedFormIds.includes(form.id))
-  }
+  const getAvailableForms = () => availableForms;
 
   const handleProtocolChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
@@ -126,24 +126,18 @@ export default function NewProtocolPage() {
   }
 
   const addNewForm = () => {
-    const availableFormsForSelection = getAvailableForms()
-
-    if (availableFormsForSelection.length === 0) {
-      alert("No hay más formularios disponibles para agregar al protocolo.")
-      return
-    }
-
+    // Eliminar el alert y la condición que bloquea
     const newForm: ProtocolForm = {
       id: Date.now(),
-      formId: availableFormsForSelection[0].id,
+      formId: availableForms[0]?.id || 0,
       previousFormId: null,
       delayDays: 0,
       repeatCount: 1,
       repeatIntervalDays: 0,
       orderInProtocol: protocolForms.length + 1,
-    }
-    setCurrentForm(newForm)
-    setIsEditingForm(true)
+    };
+    setCurrentForm(newForm);
+    setIsEditingForm(true);
   }
 
   const editForm = (form: ProtocolForm) => {
@@ -199,13 +193,7 @@ export default function NewProtocolPage() {
   }
 
   // Obtener formularios disponibles para el selector (excluyendo el actual si está editando)
-  const getFormsForSelector = () => {
-    const selectedFormIds = protocolForms
-      .filter((pf) => !currentForm || pf.id !== currentForm.id)
-      .map((pf) => pf.formId)
-
-    return availableForms.filter((form) => !selectedFormIds.includes(form.id))
-  }
+  const getFormsForSelector = () => availableForms;
 
   const validateCurrentStep = () => {
     if (currentStep === 1) {
@@ -277,7 +265,13 @@ export default function NewProtocolPage() {
         const userId = user?.id || 1
 
         for (const patientId of selectedPatients) {
-          await patientProtocolsApi.assignPatientToProtocol(patientId, protocolId, userId)
+          const assignData = {
+            patient_id: patientId,
+            protocol_id: protocolId,
+            start_date: new Date().toISOString().split("T")[0], // Fecha actual en formato YYYY-MM-DD
+            assigned_by: userId
+          }
+          await patientProtocolsApi.assignPatientToProtocol(assignData)
         }
       }
 
@@ -290,6 +284,17 @@ export default function NewProtocolPage() {
       setIsSaving(false)
     }
   }
+
+  // Handler para drag end
+  const handleDragEnd = (event: any) => {
+    const { active, over } = event;
+    if (active.id !== over.id) {
+      const oldIndex = protocolForms.findIndex((f: any) => f.id === active.id);
+      const newIndex = protocolForms.findIndex((f: any) => f.id === over.id);
+      const newForms = arrayMove(protocolForms, oldIndex, newIndex).map((f: ProtocolForm, idx: number) => ({ ...f, order_in_protocol: idx + 1 }));
+      setProtocolForms(newForms);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -429,7 +434,7 @@ export default function NewProtocolPage() {
         <>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <h2 className="text-xl font-semibold">Formularios del protocolo</h2>
-            <Button onClick={addNewForm} disabled={isEditingForm || isLoadingForms || getAvailableForms().length === 0}>
+            <Button onClick={addNewForm} disabled={isEditingForm || isLoadingForms}>
               <Plus className="mr-2 h-4 w-4" />
               Añadir formulario
             </Button>
@@ -461,28 +466,6 @@ export default function NewProtocolPage() {
                           {form.name_es}
                         </SelectItem>
                       ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="previousFormId">Formulario anterior (opcional)</Label>
-                  <Select
-                    value={currentForm.previousFormId?.toString() || "0"}
-                    onValueChange={(value) => handleFormChange("previousFormId", value ? Number.parseInt(value) : null)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Ninguno (primer formulario)" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="0">Ninguno (primer formulario)</SelectItem>
-                      {protocolForms
-                        .filter((f) => f.id !== currentForm.id)
-                        .map((form) => (
-                          <SelectItem key={form.id} value={form.formId.toString()}>
-                            {getFormName(form.formId)}
-                          </SelectItem>
-                        ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -547,42 +530,20 @@ export default function NewProtocolPage() {
                 <CardTitle>Formularios del protocolo</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  {protocolForms.map((form, index) => (
-                    <div
-                      key={form.id}
-                      className="flex flex-col sm:flex-row sm:items-center justify-between border p-4 rounded-md gap-4"
-                    >
-                      <div className="space-y-1">
-                        <div className="flex items-center space-x-2">
-                          <span className="font-medium">
-                            {index + 1}. {getFormName(form.formId)}
-                          </span>
-                        </div>
-                        <div className="text-sm text-muted-foreground">
-                          <span className="font-medium">Retraso:</span> {form.delayDays} días
-                        </div>
-                        <div className="text-sm text-muted-foreground">
-                          <span className="font-medium">Repeticiones:</span> {form.repeatCount}
-                          {form.repeatIntervalDays > 0 && ` (cada ${form.repeatIntervalDays} días)`}
-                        </div>
-                      </div>
-                      <div className="flex space-x-2">
-                        <Button variant="outline" size="icon" onClick={() => editForm(form)} disabled={isEditingForm}>
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          onClick={() => deleteForm(form.id)}
-                          disabled={isEditingForm}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                  <SortableContext items={protocolForms.map(f => f.id)} strategy={verticalListSortingStrategy}>
+                    {protocolForms.map((form, index) => (
+                      <DraggableFormItem
+                        key={form.id}
+                        form={form}
+                        index={index}
+                        onEdit={editForm}
+                        onDelete={deleteForm}
+                        isEditingForm={isEditingForm}
+                      />
+                    ))}
+                  </SortableContext>
+                </DndContext>
               </CardContent>
             </Card>
           ) : (
@@ -709,4 +670,38 @@ export default function NewProtocolPage() {
       )}
     </div>
   )
+}
+
+// Componente para ítem draggable
+function DraggableFormItem({ form, index, onEdit, onDelete, isEditingForm }: any) {
+  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: form.id });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    background: '#fff',
+  };
+  return (
+    <div ref={setNodeRef} style={style} {...attributes} {...listeners} className="flex flex-col sm:flex-row sm:items-center justify-between border p-4 rounded-md gap-4 cursor-move">
+      <div className="space-y-1">
+        <div className="flex items-center space-x-2">
+          <span className="font-medium">{index + 1}. {form.form_name_es}</span>
+        </div>
+        <div className="text-sm text-muted-foreground">
+          <span className="font-medium">Retraso:</span> {form.delay_days} días
+        </div>
+        <div className="text-sm text-muted-foreground">
+          <span className="font-medium">Repeticiones:</span> {form.repeat_count}
+          {form.repeat_interval_days > 0 && ` (cada ${form.repeat_interval_days} días)`}
+        </div>
+      </div>
+      <div className="flex space-x-2">
+        <Button variant="outline" size="icon" onClick={() => onEdit(form)} disabled={isEditingForm}>
+          <Edit className="h-4 w-4" />
+        </Button>
+        <Button variant="outline" size="icon" onClick={() => onDelete(form.id)} disabled={isEditingForm}>
+          <Trash2 className="h-4 w-4" />
+        </Button>
+      </div>
+    </div>
+  );
 }

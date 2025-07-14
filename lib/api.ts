@@ -14,7 +14,7 @@ const getAuthHeaders = () => {
 }
 
 // Helper function to handle API responses
-const handleResponse = async (response: Response) => {
+export const handleResponse = async (response: Response) => {
   if (!response.ok) {
     const errorText = await response.text()
     throw new Error(`HTTP ${response.status}: ${errorText}`)
@@ -119,6 +119,16 @@ export const protocolsApi = {
       method: "PUT",
       headers: getAuthHeaders(),
       body: JSON.stringify(formsData),
+    })
+    return handleResponse(response)
+  },
+
+  // Nueva función: agregar formulario a protocolo
+  addFormToProtocol: async (protocolId: number, formId: number, data: any) => {
+    const response = await fetch(`${API_BASE_URL}/protocols/${protocolId}/forms/${formId}`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
     })
     return handleResponse(response)
   },

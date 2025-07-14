@@ -17,6 +17,10 @@ import Link from "next/link"
 import { protocolsApi, formsApi, patientsApi, patientProtocolsApi } from "@/lib/api"
 import { authUtils } from "@/lib/auth"
 import { config } from "@/lib/config"
+import { DndContext, closestCenter } from '@dnd-kit/core';
+import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { handleResponse } from '@/lib/api';
 
 interface Form {
   id: number
@@ -26,15 +30,12 @@ interface Form {
 }
 
 interface ProtocolForm {
-  protocol_id: number
-  form_id: number
-  previous_form_id: number | null
-  delay_days: number
-  repeat_count: number
-  repeat_interval_days: number
-  order_in_protocol: number
-  form_name_es: string
-  form_name_en: string
+  id: number;
+  formId: number;
+  delayDays: number;
+  repeatCount: number;
+  repeatIntervalDays: number;
+  orderInProtocol: number;
 }
 
 interface Patient {
@@ -43,6 +44,41 @@ interface Patient {
   last_name: string
   email: string
   date_of_birth: string
+}
+
+// Componente para ítem draggable
+function DraggableFormItem({ form, index, onDelete, isEditingForm, deletingFormId }: any) {
+  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: form.id });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    background: '#fff',
+  };
+  return (
+    <div ref={setNodeRef} style={style} {...attributes} {...listeners} className="flex flex-col sm:flex-row sm:items-center justify-between border p-4 rounded-md gap-4 cursor-move">
+      <div className="space-y-1">
+        <div className="flex items-center space-x-2">
+          <span className="font-medium">{index + 1}. {form.form_name_es}</span>
+        </div>
+        <div className="text-sm text-muted-foreground">
+          <span className="font-medium">Retraso:</span> {form.delay_days} días
+        </div>
+        <div className="text-sm text-muted-foreground">
+          {form.repeat_count > 1 && (
+            <>
+              <span className="font-medium">Repeticiones:</span> {form.repeat_count}
+              {form.repeat_interval_days > 0 && ` (cada ${form.repeat_interval_days} días)`}
+            </>
+          )}
+        </div>
+      </div>
+      <div className="flex space-x-2">
+        <Button variant="outline" size="icon" onClick={() => onDelete(form.id)} disabled={isEditingForm || deletingFormId === form.id}>
+          <Trash2 className="h-4 w-4" />
+        </Button>
+      </div>
+    </div>
+  );
 }
 
 export default function EditProtocolPage() {
@@ -71,6 +107,7 @@ export default function EditProtocolPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [isLoadingPatients, setIsLoadingPatients] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [deletingFormId, setDeletingFormId] = useState<number | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -148,60 +185,86 @@ export default function EditProtocolPage() {
     setProtocol({ ...protocol, keyName: value })
   }
 
+  // 1. Estado del formulario a agregar igual que en creación
+  interface ProtocolForm {
+    id: number;
+    formId: number;
+    delayDays: number;
+    repeatCount: number;
+    repeatIntervalDays: number;
+    orderInProtocol: number;
+  }
+
+  // 2. Al agregar nuevo formulario
   const addNewForm = () => {
-    const usedFormIds = protocolForms.map((pf) => pf.form_id)
-    const availableFormsForSelection = availableForms.filter((form) => !usedFormIds.includes(form.id))
-
-    if (availableFormsForSelection.length === 0) {
-      alert("No hay más formularios disponibles para agregar al protocolo.")
-      return
-    }
-
     const newForm: ProtocolForm = {
-      protocol_id: protocolId,
-      form_id: availableFormsForSelection[0].id,
-      previous_form_id: null,
-      delay_days: 0,
-      repeat_count: 1,
-      repeat_interval_days: 0,
-      order_in_protocol: protocolForms.length + 1,
-      form_name_es: availableFormsForSelection[0].name_es,
-      form_name_en: availableFormsForSelection[0].name_en,
-    }
-    setCurrentForm(newForm)
-    setIsEditingForm(true)
+      id: Date.now(),
+      formId: availableForms[0]?.id || 0,
+      delayDays: 0,
+      repeatCount: 1,
+      repeatIntervalDays: 0,
+      orderInProtocol: protocolForms.length + 1,
+    };
+    setCurrentForm(newForm);
+    setIsEditingForm(true);
   }
 
-  const editForm = (form: ProtocolForm) => {
-    setCurrentForm({ ...form })
-    setIsEditingForm(true)
-  }
+  // 3. Render del Select igual que en creación
+  const getFormsForSelector = () => availableForms;
 
+  // En el Select de 'Formulario anterior', mostrar id y nombre, y solo formularios que no sean previous_form_id de otro
+  const getAvailablePreviousForms = () => {
+    // Formularios que no son previous_form_id de ningún otro
+    const usedAsPrevious = protocolForms.map(f => f.previous_form_id).filter(Boolean);
+    return protocolForms.filter(f => !usedAsPrevious.includes(f.id) && f.id !== currentForm?.id);
+  };
+
+  // 4. Guardar formulario igual que en creación
   const saveForm = () => {
-    if (!currentForm) return
-
-    // Validar campos obligatorios
-    if (!currentForm.form_id) {
-      alert("Por favor seleccione un formulario.")
-      return
+    if (!currentForm) return;
+    if (!currentForm.formId) {
+      alert("Por favor seleccione un formulario.");
+      return;
     }
-
-    const updatedForms = protocolForms.some(
-      (f) => f.form_id === currentForm.form_id && f.order_in_protocol === currentForm.order_in_protocol,
-    )
-      ? protocolForms.map((f) =>
-          f.form_id === currentForm.form_id && f.order_in_protocol === currentForm.order_in_protocol ? currentForm : f,
-        )
-      : [...protocolForms, currentForm]
-
-    setProtocolForms(updatedForms)
-    setCurrentForm(null)
-    setIsEditingForm(false)
+    const updatedForms = protocolForms.some((f) => f.id === currentForm.id)
+      ? protocolForms.map((f) => (f.id === currentForm.id ? currentForm : f))
+      : [...protocolForms, currentForm];
+    setProtocolForms(updatedForms);
+    setCurrentForm(null);
+    setIsEditingForm(false);
   }
 
-  const deleteForm = (formId: number, orderInProtocol: number) => {
-    setProtocolForms(protocolForms.filter((f) => !(f.form_id === formId && f.order_in_protocol === orderInProtocol)))
-  }
+  // 2. Implementar la función deleteForm que llama al endpoint POST /protocols/{protocolId}/forms/{formProtocolId}
+  const deleteForm = async (formProtocolId: number) => {
+    setDeletingFormId(formProtocolId);
+    const url = `${config.API_BASE_URL}/protocols/${protocolId}/forms/${formProtocolId}`;
+    console.log('[DELETE] Intentando borrar formProtocolId:', formProtocolId, 'de protocolo', protocolId, 'URL:', url);
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+          Authorization: `Bearer ${localStorage.getItem(config.TOKEN_KEY)}`,
+        },
+      });
+      console.log('[DELETE] Respuesta del backend:', res.status, res.statusText);
+      const text = await res.text();
+      console.log('[DELETE] Respuesta body:', text);
+      if (!res.ok) {
+        alert('Error al borrar el formulario: ' + text);
+        setDeletingFormId(null);
+        return;
+      }
+      setProtocolForms(protocolForms.filter(f => f.id !== formProtocolId));
+      alert('Formulario borrado correctamente');
+    } catch (err: any) {
+      console.log('[DELETE] Error en catch:', err);
+      alert('Error al borrar el formulario: ' + (err?.message || ''));
+    } finally {
+      setDeletingFormId(null);
+    }
+  };
 
   const handleFormChange = (field: string, value: any) => {
     if (!currentForm) return
@@ -245,13 +308,28 @@ export default function EditProtocolPage() {
       console.log("Actualizando protocolo:", protocolData)
       await protocolsApi.updateProtocol(protocolId, protocolData)
 
-      // Actualizar formularios del protocolo
-      const formsData = {
-        forms: protocolForms,
+      // Asignar formularios al protocolo uno por uno
+      for (const f of protocolForms) {
+        const formData = {
+          delay_days: f.delayDays,
+          repeat_count: f.repeatCount,
+          repeat_interval_days: f.repeatIntervalDays,
+          order_in_protocol: f.orderInProtocol,
+        };
+        await protocolsApi.addFormToProtocol(protocolId, f.formId, formData);
       }
-
-      console.log("Actualizando formularios del protocolo:", formsData)
-      await protocolsApi.updateProtocolForms(protocolId, formsData)
+      // Reordenar los formularios inmediatamente después
+      await fetch(`${config.API_BASE_URL}/protocols/${protocolId}/reorder/`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+          Authorization: `Bearer ${localStorage.getItem(config.TOKEN_KEY)}`,
+        },
+        body: JSON.stringify({
+          orderedForms: protocolForms.map((f, idx) => ({ id: f.id, order_in_protocol: idx + 1 }))
+        })
+      });
 
       // Actualizar asignaciones de pacientes usando el endpoint correcto
       if (activeTab === "patients") {
@@ -337,18 +415,28 @@ export default function EditProtocolPage() {
     return form ? form.name_es : "Formulario no encontrado"
   }
 
-  // Obtener formularios disponibles para el selector (excluyendo los ya seleccionados)
-  const getFormsForSelector = () => {
-    const usedFormIds = protocolForms
-      .filter(
-        (pf) =>
-          !currentForm ||
-          !(pf.form_id === currentForm.form_id && pf.order_in_protocol === currentForm.order_in_protocol),
-      )
-      .map((pf) => pf.form_id)
-
-    return availableForms.filter((form) => !usedFormIds.includes(form.id))
-  }
+  // Handler para drag end
+  const handleDragEnd = async (event: any) => {
+    const { active, over } = event;
+    if (active.id !== over.id) {
+      const oldIndex = protocolForms.findIndex((f: any) => f.id === active.id);
+      const newIndex = protocolForms.findIndex((f: any) => f.id === over.id);
+      const newForms = arrayMove(protocolForms, oldIndex, newIndex).map((f: ProtocolForm, idx: number) => ({ ...f, order_in_protocol: idx + 1 }));
+      setProtocolForms(newForms);
+      // Llamar al endpoint de reorder
+      await fetch(`${config.API_BASE_URL}/protocols/${protocolId}/reorder/`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+          Authorization: `Bearer ${localStorage.getItem(config.TOKEN_KEY)}`,
+        },
+        body: JSON.stringify({
+          orderedForms: newForms.map(f => ({ id: f.id, order_in_protocol: f.order_in_protocol }))
+        })
+      });
+    }
+  };
 
   if (isLoading) {
     return (
@@ -465,7 +553,7 @@ export default function EditProtocolPage() {
               <CardHeader>
                 <CardTitle>
                   {protocolForms.some(
-                    (f) => f.form_id === currentForm.form_id && f.order_in_protocol === currentForm.order_in_protocol,
+                    (f) => f.formId === currentForm.formId && f.orderInProtocol === currentForm.orderInProtocol,
                   )
                     ? "Editar formulario"
                     : "Nuevo formulario"}
@@ -475,54 +563,18 @@ export default function EditProtocolPage() {
                 <div className="space-y-2">
                   <Label htmlFor="formId">Formulario</Label>
                   <Select
-                    value={currentForm.form_id.toString()}
-                    onValueChange={(value) => {
-                      const selectedForm = availableForms.find((f) => f.id === Number.parseInt(value))
-                      if (selectedForm) {
-                        handleFormChange("form_id", Number.parseInt(value))
-                        handleFormChange("form_name_es", selectedForm.name_es)
-                        handleFormChange("form_name_en", selectedForm.name_en)
-                      }
-                    }}
+                    value={currentForm?.formId ? currentForm.formId.toString() : ""}
+                    onValueChange={(value) => setCurrentForm(currentForm ? { ...currentForm, formId: Number.parseInt(value) } : null)}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Seleccione un formulario" />
                     </SelectTrigger>
                     <SelectContent>
-                      {getFormsForSelector().map((form) => (
-                        <SelectItem key={form.id} value={form.id.toString()}>
-                          {form.name_es}
+                      {availableForms.map((form) => (
+                        <SelectItem key={`form-${form.id}`} value={form.id.toString()}>
+                          {form.name_es} (ID {form.id})
                         </SelectItem>
                       ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="previousFormId">Formulario anterior (opcional)</Label>
-                  <Select
-                    value={currentForm.previous_form_id?.toString() || "0"}
-                    onValueChange={(value) =>
-                      handleFormChange("previous_form_id", value ? Number.parseInt(value) : null)
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Ninguno (primer formulario)" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="0">Ninguno (primer formulario)</SelectItem>
-                      {protocolForms
-                        .filter(
-                          (f) =>
-                            !(
-                              f.form_id === currentForm.form_id && f.order_in_protocol === currentForm.order_in_protocol
-                            ),
-                        )
-                        .map((form) => (
-                          <SelectItem key={`${form.form_id}-${form.order_in_protocol}`} value={form.form_id.toString()}>
-                            {form.form_name_es}
-                          </SelectItem>
-                        ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -534,8 +586,8 @@ export default function EditProtocolPage() {
                       id="delayDays"
                       type="number"
                       min="0"
-                      value={currentForm.delay_days}
-                      onChange={(e) => handleFormChange("delay_days", Number.parseInt(e.target.value) || 0)}
+                      value={currentForm.delayDays}
+                      onChange={(e) => handleFormChange("delayDays", Number.parseInt(e.target.value) || 0)}
                       placeholder="0"
                     />
                   </div>
@@ -545,8 +597,8 @@ export default function EditProtocolPage() {
                       id="repeatCount"
                       type="number"
                       min="1"
-                      value={currentForm.repeat_count}
-                      onChange={(e) => handleFormChange("repeat_count", Number.parseInt(e.target.value) || 1)}
+                      value={currentForm.repeatCount}
+                      onChange={(e) => handleFormChange("repeatCount", Number.parseInt(e.target.value) || 1)}
                       placeholder="1"
                     />
                   </div>
@@ -556,8 +608,8 @@ export default function EditProtocolPage() {
                       id="repeatIntervalDays"
                       type="number"
                       min="0"
-                      value={currentForm.repeat_interval_days}
-                      onChange={(e) => handleFormChange("repeat_interval_days", Number.parseInt(e.target.value) || 0)}
+                      value={currentForm.repeatIntervalDays}
+                      onChange={(e) => handleFormChange("repeatIntervalDays", Number.parseInt(e.target.value) || 0)}
                       placeholder="0"
                     />
                   </div>
@@ -584,42 +636,22 @@ export default function EditProtocolPage() {
                 <CardTitle>Formularios del protocolo</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  {protocolForms.map((form, index) => (
-                    <div
-                      key={`${form.form_id}-${form.order_in_protocol}`}
-                      className="flex items-center justify-between border p-4 rounded-md"
-                    >
-                      <div className="space-y-1">
-                        <div className="flex items-center space-x-2">
-                          <span className="font-medium">
-                            {index + 1}. {form.form_name_es}
-                          </span>
-                        </div>
-                        <div className="text-sm text-muted-foreground">
-                          <span className="font-medium">Retraso:</span> {form.delay_days} días
-                        </div>
-                        <div className="text-sm text-muted-foreground">
-                          <span className="font-medium">Repeticiones:</span> {form.repeat_count}
-                          {form.repeat_interval_days > 0 && ` (cada ${form.repeat_interval_days} días)`}
-                        </div>
-                      </div>
-                      <div className="flex space-x-2">
-                        <Button variant="outline" size="icon" onClick={() => editForm(form)} disabled={isEditingForm}>
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          onClick={() => deleteForm(form.form_id, form.order_in_protocol)}
-                          disabled={isEditingForm}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
+                <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                  <SortableContext items={protocolForms.map(f => f.id)} strategy={verticalListSortingStrategy}>
+                    <div className="space-y-4 max-h-[400px] overflow-auto">
+                      {protocolForms.map((form, index) => (
+                        <DraggableFormItem
+                          key={form.id}
+                          form={form}
+                          index={index}
+                          onDelete={deleteForm}
+                          isEditingForm={isEditingForm}
+                          deletingFormId={deletingFormId}
+                        />
+                      ))}
                     </div>
-                  ))}
-                </div>
+                  </SortableContext>
+                </DndContext>
               </CardContent>
             </Card>
           ) : (

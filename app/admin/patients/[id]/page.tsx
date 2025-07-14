@@ -24,6 +24,7 @@ import Link from "next/link"
 import { nationalitiesApi } from "@/lib/api"
 import { config } from "@/lib/config"
 import { authUtils } from "@/lib/auth"
+import { useLanguage } from "@/lib/language-context"
 
 interface PatientProtocol {
   id: number
@@ -103,6 +104,7 @@ export default function EditPatientPage() {
     phone: "",
   })
   const [patientProtocols, setPatientProtocols] = useState<PatientProtocol[]>([])
+  const [originalPatientProtocols, setOriginalPatientProtocols] = useState<PatientProtocol[]>([]);
   const [protocolForms, setProtocolForms] = useState<
     Record<number, { available: ProtocolForm[]; responded: ProtocolForm[] }>
   >({})
@@ -497,6 +499,46 @@ export default function EditPatientPage() {
   const user = typeof window !== "undefined" ? authUtils.getUser() : null;
   const isViewer = user?.role === "viewer";
 
+  const { language } = useLanguage();
+  const t = {
+    title: language === "es" ? "Editar paciente" : "Edit Patient",
+    subtitle: language === "es" ? "Modifique la información del paciente" : "Edit patient information",
+    save: language === "es" ? "Guardar cambios" : "Save changes",
+    saving: language === "es" ? "Guardando..." : "Saving...",
+    cancel: language === "es" ? "Cancelar" : "Cancel",
+    info: language === "es" ? "Información del paciente" : "Patient Information",
+    infoDesc: language === "es" ? "Modifique los datos del paciente" : "Edit patient data",
+    firstName: language === "es" ? "Nombre" : "First Name",
+    lastName: language === "es" ? "Apellido" : "Last Name",
+    nationality: language === "es" ? "Nacionalidad" : "Nationality",
+    dob: language === "es" ? "Fecha de nacimiento" : "Date of Birth",
+    email: language === "es" ? "Correo electrónico" : "Email",
+    phone: language === "es" ? "Teléfono" : "Phone",
+    required: language === "es" ? "*" : "*",
+    requiredInfo: language === "es" ? "Todos los campos marcados con (*) son obligatorios" : "All fields marked with (*) are required",
+    emailFormat: language === "es" ? "El email debe tener un formato válido" : "Email must be valid",
+    phoneFormat: language === "es" ? "El teléfono debe incluir el código de país" : "Phone must include country code",
+    dobFormat: language === "es" ? "La fecha de nacimiento debe ser anterior a la fecha actual" : "Date of birth must be before today",
+    protocolAssigned: language === "es" ? "Protocolos Asignados" : "Assigned Protocols",
+    protocolDesc: language === "es" ? "Protocolos médicos asignados a este paciente y sus formularios" : "Medical protocols assigned to this patient and their forms",
+    assignProtocol: language === "es" ? "Asignar Protocolo" : "Assign Protocol",
+    assign: language === "es" ? "Asignar" : "Assign",
+    startDate: language === "es" ? "Fecha de inicio" : "Start Date",
+    noProtocols: language === "es" ? "No hay protocolos disponibles" : "No protocols available",
+    selectProtocol: language === "es" ? "Seleccione un protocolo" : "Select a protocol",
+    loadingProtocols: language === "es" ? "Cargando protocolos..." : "Loading protocols...",
+    pending: language === "es" ? "Pendiente" : "Pending",
+    completed: language === "es" ? "Completado" : "Completed",
+    remove: language === "es" ? "Desasignar" : "Unassign",
+    removed: language === "es" ? "Eliminado" : "Removed",
+    new: language === "es" ? "Nuevo" : "New",
+    toRemove: language === "es" ? "A eliminar" : "To remove",
+    importantInfo: language === "es" ? "Información importante" : "Important information",
+    changesPending: language === "es" ? "Hay cambios pendientes. Haga clic en 'Guardar cambios' para aplicarlos." : "There are pending changes. Click 'Save changes' to apply them.",
+    protocolsInfo: language === "es" ? "Los cambios en protocolos se aplicarán al guardar" : "Protocol changes will be applied on save",
+    unassignWarning: language === "es" ? "Al desasignar un protocolo se perderán todas las respuestas asociadas" : "Unassigning a protocol will delete all associated responses",
+  };
+
   if (isLoadingPatient) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -518,8 +560,8 @@ export default function EditPatientPage() {
             </Button>
           </Link>
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Editar paciente</h1>
-            <p className="text-muted-foreground">Modifique la información del paciente</p>
+            <h1 className="text-3xl font-bold tracking-tight">{t.title}</h1>
+            <p className="text-muted-foreground">{t.subtitle}</p>
           </div>
         </div>
         { !isViewer && (
@@ -527,12 +569,12 @@ export default function EditPatientPage() {
             {isSaving ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Guardando...
+                {t.saving}
               </>
             ) : (
               <>
                 <Save className="mr-2 h-4 w-4" />
-                Guardar cambios
+                {t.save}
               </>
             )}
           </Button>
@@ -545,7 +587,7 @@ export default function EditPatientPage() {
           <div className="flex items-center gap-2">
             <AlertTriangle className="h-4 w-4 text-yellow-600" />
             <p className="text-sm text-yellow-800">
-              Hay cambios pendientes. Haga clic en "Guardar cambios" para aplicarlos.
+              {t.changesPending}
             </p>
           </div>
         </div>
@@ -554,35 +596,31 @@ export default function EditPatientPage() {
       {/* Información del paciente */}
       <Card>
         <CardHeader>
-          <CardTitle>Información del paciente</CardTitle>
-          <CardDescription>Modifique los datos del paciente</CardDescription>
+          <CardTitle>{t.info}</CardTitle>
+          <CardDescription>{t.infoDesc}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="firstName">
-                Nombre <span className="text-red-500">*</span>
-              </Label>
+              <Label htmlFor="firstName">{t.firstName} {t.required}</Label>
               <Input
                 id="firstName"
                 name="firstName"
                 value={patient.firstName}
                 onChange={handleInputChange}
-                placeholder="Ingrese el nombre"
+                placeholder={t.firstName}
                 required
                 disabled={isViewer}
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="lastName">
-                Apellido <span className="text-red-500">*</span>
-              </Label>
+              <Label htmlFor="lastName">{t.lastName} {t.required}</Label>
               <Input
                 id="lastName"
                 name="lastName"
                 value={patient.lastName}
                 onChange={handleInputChange}
-                placeholder="Ingrese el apellido"
+                placeholder={t.lastName}
                 required
                 disabled={isViewer}
               />
@@ -591,16 +629,14 @@ export default function EditPatientPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="nationalityId">
-                Nacionalidad <span className="text-red-500">*</span>
-              </Label>
+              <Label htmlFor="nationalityId">{t.nationality} {t.required}</Label>
               <Select
                 value={patient.nationalityId}
                 onValueChange={(value) => handleSelectChange("nationalityId", value)}
                 disabled={isLoadingNationalities || isViewer}
               >
                 <SelectTrigger id="nationalityId">
-                  <SelectValue placeholder={isLoadingNationalities ? "Cargando..." : "Seleccione nacionalidad"} />
+                  <SelectValue placeholder={isLoadingNationalities ? "Cargando..." : t.selectProtocol} />
                 </SelectTrigger>
                 <SelectContent>
                   {nationalities.map((nationality) => (
@@ -612,9 +648,7 @@ export default function EditPatientPage() {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="dateOfBirth">
-                Fecha de nacimiento <span className="text-red-500">*</span>
-              </Label>
+              <Label htmlFor="dateOfBirth">{t.dob} {t.required}</Label>
               <Input
                 id="dateOfBirth"
                 name="dateOfBirth"
@@ -629,30 +663,26 @@ export default function EditPatientPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="email">
-                Correo electrónico <span className="text-red-500">*</span>
-              </Label>
+              <Label htmlFor="email">{t.email} {t.required}</Label>
               <Input
                 id="email"
                 name="email"
                 type="email"
                 value={patient.email}
                 onChange={handleInputChange}
-                placeholder="correo@ejemplo.com"
+                placeholder={t.email}
                 required
                 disabled={isViewer}
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="phone">
-                Teléfono <span className="text-red-500">*</span>
-              </Label>
+              <Label htmlFor="phone">{t.phone} {t.required}</Label>
               <Input
                 id="phone"
                 name="phone"
                 value={patient.phone}
                 onChange={handleInputChange}
-                placeholder="+54 11 1234-5678"
+                placeholder={t.phone}
                 required
                 disabled={isViewer}
               />
@@ -666,11 +696,8 @@ export default function EditPatientPage() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle className="flex items-center gap-2">
-                <Calendar className="h-5 w-5" />
-                Protocolos Asignados
-              </CardTitle>
-              <CardDescription>Protocolos médicos asignados a este paciente y sus formularios</CardDescription>
+              <CardTitle className="flex items-center gap-2">{t.protocolAssigned}</CardTitle>
+              <CardDescription>{t.protocolDesc}</CardDescription>
             </div>
             <Dialog open={showAssignDialog} onOpenChange={setShowAssignDialog}>
               <DialogTrigger asChild>
@@ -683,19 +710,19 @@ export default function EditPatientPage() {
                   disabled={isViewer}
                 >
                   <Plus className="h-4 w-4 mr-2" />
-                  Asignar Protocolo
+                  {t.assignProtocol}
                 </Button>
               </DialogTrigger>
               <DialogContent>
                 <DialogHeader>
-                  <DialogTitle>Asignar Protocolo</DialogTitle>
+                  <DialogTitle>{t.assignProtocol}</DialogTitle>
                   <DialogDescription>
-                    Seleccione un protocolo y la fecha de inicio para asignarlo al paciente.
+                    {t.assignProtocol}
                   </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="protocol">Protocolo</Label>
+                    <Label htmlFor="protocol">{t.assignProtocol}</Label>
                     <Select
                       value={selectedProtocolId}
                       onValueChange={setSelectedProtocolId}
@@ -705,10 +732,10 @@ export default function EditPatientPage() {
                         <SelectValue
                           placeholder={
                             isLoadingAvailableProtocols
-                              ? "Cargando protocolos..."
+                              ? t.loadingProtocols
                               : availableProtocols.length === 0
-                                ? "No hay protocolos disponibles"
-                                : "Seleccione un protocolo"
+                                ? t.noProtocols
+                                : t.selectProtocol
                           }
                         />
                       </SelectTrigger>
@@ -723,12 +750,12 @@ export default function EditPatientPage() {
                     {isLoadingAvailableProtocols && (
                       <div className="flex items-center gap-2 text-sm text-gray-600">
                         <Loader2 className="h-4 w-4 animate-spin" />
-                        Cargando protocolos...
+                        {t.loadingProtocols}
                       </div>
                     )}
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="startDate">Fecha de inicio</Label>
+                    <Label htmlFor="startDate">{t.startDate}</Label>
                     <Input
                       id="startDate"
                       type="date"
@@ -740,13 +767,13 @@ export default function EditPatientPage() {
                 </div>
                 <DialogFooter>
                   <Button variant="outline" onClick={() => setShowAssignDialog(false)}>
-                    Cancelar
+                    {t.cancel}
                   </Button>
                   <Button
                     onClick={handleAssignProtocol}
                     disabled={!selectedProtocolId || !startDate || isLoadingAvailableProtocols || isViewer}
                   >
-                    Asignar
+                    {t.assign}
                   </Button>
                 </DialogFooter>
               </DialogContent>
@@ -757,7 +784,7 @@ export default function EditPatientPage() {
           {isLoadingProtocols ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="h-6 w-6 animate-spin mr-2" />
-              <span>Cargando protocolos...</span>
+              <span>{t.loadingProtocols}</span>
             </div>
           ) : patientProtocols.length === 0 ? (
             <div className="text-center py-8">
@@ -788,12 +815,12 @@ export default function EditPatientPage() {
                             {protocol.protocol_name_es}
                             {isNewProtocol && (
                               <Badge variant="secondary" className="bg-green-100 text-green-800">
-                                Nuevo
+                                {t.new}
                               </Badge>
                             )}
                             {isToBeRemoved && (
                               <Badge variant="secondary" className="bg-red-100 text-red-800">
-                                A eliminar
+                                {t.toRemove}
                               </Badge>
                             )}
                           </CardTitle>
@@ -808,7 +835,7 @@ export default function EditPatientPage() {
                           disabled={isToBeRemoved || isViewer}
                         >
                           <X className="h-4 w-4 mr-1" />
-                          {isToBeRemoved ? "Eliminado" : "Desasignar"}
+                          {isToBeRemoved ? t.removed : t.remove}
                         </Button>
                       </div>
                     </CardHeader>
@@ -818,7 +845,7 @@ export default function EditPatientPage() {
                           {/* Formularios a responder */}
                           <div>
                             <h4 className="font-medium text-sm mb-3 flex items-center gap-2">
-                              <FileText className="h-4 w-4 text-orange-500" />A responder (
+                              <FileText className="h-4 w-4 text-orange-500" />{t.pending} (
                               {protocolForms[protocol.protocol_id]?.available?.length || 0})
                             </h4>
                             <div className="space-y-2">
@@ -833,12 +860,12 @@ export default function EditPatientPage() {
                                       <p className="text-xs text-gray-600">{form.description_es}</p>
                                     </div>
                                     <Badge variant="secondary" className="bg-orange-100 text-orange-800">
-                                      Pendiente
+                                      {t.pending}
                                     </Badge>
                                   </div>
                                 ))
                               ) : (
-                                <p className="text-sm text-gray-500 italic">No hay formularios pendientes</p>
+                                <p className="text-sm text-gray-500 italic">No hay formularios {t.pending}</p>
                               )}
                             </div>
                           </div>
@@ -847,7 +874,7 @@ export default function EditPatientPage() {
                           <div>
                             <h4 className="font-medium text-sm mb-3 flex items-center gap-2">
                               <CheckCircle className="h-4 w-4 text-green-500" />
-                              Completados ({protocolForms[protocol.protocol_id]?.responded?.length || 0})
+                              {t.completed} ({protocolForms[protocol.protocol_id]?.responded?.length || 0})
                             </h4>
                             <div className="space-y-2">
                               {protocolForms[protocol.protocol_id]?.responded?.length > 0 ? (
@@ -861,12 +888,12 @@ export default function EditPatientPage() {
                                       <p className="text-xs text-gray-600">{form.description_es}</p>
                                     </div>
                                     <Badge variant="secondary" className="bg-green-100 text-green-800">
-                                      Completado
+                                      {t.completed}
                                     </Badge>
                                   </div>
                                 ))
                               ) : (
-                                <p className="text-sm text-gray-500 italic">No hay formularios completados</p>
+                                <p className="text-sm text-gray-500 italic">No hay formularios {t.completed}</p>
                               )}
                             </div>
                           </div>
@@ -882,32 +909,32 @@ export default function EditPatientPage() {
       </Card>
 
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-        <h4 className="text-sm font-medium text-blue-900 mb-2">Información importante</h4>
+        <h4 className="text-sm font-medium text-blue-900 mb-2">{t.importantInfo}</h4>
         <ul className="text-sm text-blue-800 space-y-1">
-          <li>• Todos los campos marcados con (*) son obligatorios</li>
-          <li>• El email debe tener un formato válido</li>
-          <li>• El teléfono debe incluir el código de país</li>
-          <li>• La fecha de nacimiento debe ser anterior a la fecha actual</li>
-          <li>• Los cambios en protocolos se aplicarán al guardar</li>
-          <li>• Al desasignar un protocolo se perderán todas las respuestas asociadas</li>
+          <li>• {t.requiredInfo}</li>
+          <li>• {t.emailFormat}</li>
+          <li>• {t.phoneFormat}</li>
+          <li>• {t.dobFormat}</li>
+          <li>• {t.protocolsInfo}</li>
+          <li>• {t.unassignWarning}</li>
         </ul>
       </div>
 
       <div className="flex justify-end space-x-4">
         <Link href="/admin/patients">
-          <Button variant="outline">Cancelar</Button>
+          <Button variant="outline">{t.cancel}</Button>
         </Link>
         { !isViewer && (
           <Button onClick={saveAllChanges} disabled={isSaving}>
             {isSaving ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Guardando...
+                {t.saving}
               </>
             ) : (
               <>
                 <Save className="mr-2 h-4 w-4" />
-                Guardar cambios
+                {t.save}
               </>
             )}
           </Button>

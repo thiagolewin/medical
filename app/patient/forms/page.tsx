@@ -20,12 +20,14 @@ interface FormWithStatus {
   protocol_name: string
   protocol_id: number
   patient_protocol_id: number
+  protocolform: number // <--- Cambiado para coincidir con el backend
   is_available: boolean
   is_completed: boolean
   start_date: string
   delay_days: number
   available_date: string
   days_until_available?: number
+  order_in_protocol?: number
 }
 
 interface ProtocolForm {
@@ -131,15 +133,18 @@ export default function PatientFormsPage() {
           const protocol_id = form.protocol_id || form.protocolid || 0
           const patient_protocol_id = form.patient_protocol_id || form.patientprotocolid || 0
 
-          let available_date = form.start_date
+          // Calcular la fecha de disponibilidad real: start_date + delay_days
+          const protocolStart = new Date(form.start_date)
+          const availableDate = new Date(protocolStart)
+          availableDate.setDate(availableDate.getDate() + (form.delay_days || 0))
+          const today = new Date()
+          const available_date = availableDate.toISOString()
           let days_until_available: number | undefined = undefined
-          if (estado === 'pending') {
-            const today = new Date()
-            const availableDate = new Date(form.start_date)
+          if (today < availableDate) {
             const diffTime = availableDate.getTime() - today.getTime()
             days_until_available = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-            available_date = form.start_date
           }
+
           return {
             id: form.id,
             name_es: form.name_es,
@@ -149,12 +154,14 @@ export default function PatientFormsPage() {
             protocol_name: form.key_name || '',
             protocol_id: protocol_id,
             patient_protocol_id: patient_protocol_id,
+            protocolform: form.protocolform, // <--- Cambiado para coincidir con el backend
             is_available: estado === 'available',
             is_completed: estado === 'completed',
             start_date: form.start_date,
             delay_days: form.delay_days,
             available_date: available_date,
             days_until_available: days_until_available,
+            order_in_protocol: form.order_in_protocol || form.orderInProtocol || 0,
           }
         }
 
@@ -359,8 +366,8 @@ export default function PatientFormsPage() {
               </CardContent>
             </Card>
           ) : (
-            Array.isArray(filteredForms) && filteredForms.map((form) => (
-              <Card key={form.id} className="hover:shadow-md transition-shadow">
+            Array.isArray(filteredForms) && [...filteredForms].sort((a, b) => Number(a.order_in_protocol ?? 0) - Number(b.order_in_protocol ?? 0)).map((form) => (
+              <Card key={form.protocolform} className="hover:shadow-md transition-shadow">
                 <CardContent className="p-4 sm:p-6">
                   <div className="space-y-4">
                     <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
@@ -374,12 +381,13 @@ export default function PatientFormsPage() {
                         <div className="text-xs sm:text-sm text-gray-500 space-y-1">
                           <p>Inicio del protocolo: {new Date(form.start_date).toLocaleDateString()}</p>
                           <p>Días de espera: {form.delay_days}</p>
-                          {form.available_date && (
-                            <p>Disponible desde: {new Date(form.available_date).toLocaleDateString()}</p>
-                          )}
-                          {form.days_until_available && form.days_until_available > 0 && (
+                          {form.days_until_available && form.days_until_available > 0 ? (
                             <p className="text-yellow-600 font-medium">
-                              Disponible en {form.days_until_available} día{form.days_until_available > 1 ? "s" : ""}
+                              Disponible en {form.days_until_available} día{form.days_until_available > 1 ? "s" : ""} ({new Date(form.available_date).toLocaleDateString()})
+                            </p>
+                          ) : (
+                            <p className="text-green-700 font-medium">
+                              Disponible desde: {new Date(form.available_date).toLocaleDateString()}
                             </p>
                           )}
                         </div>

@@ -10,6 +10,7 @@ import Link from "next/link"
 import { formsApi, questionsApi } from "@/lib/api"
 import { useLanguage } from "@/lib/language-context"
 import { authUtils } from "@/lib/auth"
+import { config } from "@/lib/config";
 
 interface Form {
   id: number
@@ -30,6 +31,39 @@ export default function FormsPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [isLoading, setIsLoading] = useState(true)
   const [loadingQuestions, setLoadingQuestions] = useState<Record<number, boolean>>({})
+
+  // --- Nueva sección: Enviar Query SQL ---
+  const [query, setQuery] = useState("");
+  const [queryResult, setQueryResult] = useState<any>(null);
+  const [queryError, setQueryError] = useState<string>("");
+  const [isQueryLoading, setIsQueryLoading] = useState(false);
+
+  const handleQuerySubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setQueryError("");
+    setQueryResult(null);
+    setIsQueryLoading(true);
+    try {
+      const response = await fetch(`${config.API_BASE_URL}/forms/query`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "ngrok-skip-browser-warning": "true",
+        },
+        body: JSON.stringify({ sql: query }),
+      });
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(errorText || `Error ${response.status}`);
+      }
+      const data = await response.json();
+      setQueryResult(data);
+    } catch (err: any) {
+      setQueryError(err.message || "Error al enviar la consulta");
+    } finally {
+      setIsQueryLoading(false);
+    }
+  };
 
   useEffect(() => {
     const fetchForms = async () => {
@@ -210,6 +244,30 @@ export default function FormsPage() {
           ))}
         </div>
       )}
+
+      {/* Nueva sección: Enviar Query SQL */}
+      <section style={{ marginTop: 32, marginBottom: 32, padding: 24, border: "1px solid #eee", borderRadius: 8 }}>
+        <h2 style={{ fontWeight: 600, fontSize: 20, marginBottom: 12 }}>Enviar Query SQL</h2>
+        <form onSubmit={handleQuerySubmit} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <textarea
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            placeholder="Escribe tu consulta SQL aquí..."
+            rows={4}
+            style={{ fontFamily: "monospace", fontSize: 16, padding: 8 }}
+            required
+          />
+          <button type="submit" disabled={isQueryLoading} style={{ padding: "8px 16px", fontWeight: 600 }}>
+            {isQueryLoading ? "Enviando..." : "Enviar Query"}
+          </button>
+        </form>
+        {queryError && <div style={{ color: "red", marginTop: 8 }}>Error: {queryError}</div>}
+        {queryResult && (
+          <pre style={{ marginTop: 16, background: "#f8f8f8", padding: 12, borderRadius: 4, maxHeight: 300, overflow: "auto" }}>
+            {JSON.stringify(queryResult, null, 2)}
+          </pre>
+        )}
+      </section>
     </div>
   )
 }

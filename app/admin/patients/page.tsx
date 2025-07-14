@@ -17,6 +17,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { patientsApi } from "@/lib/api"
+import { useLanguage } from "@/lib/language-context"
 
 export default function PatientsPage() {
   const [searchTerm, setSearchTerm] = useState("")
@@ -24,6 +25,29 @@ export default function PatientsPage() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [patientToDelete, setPatientToDelete] = useState<number | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+
+  const { language } = useLanguage();
+  const t = {
+    title: language === "es" ? "Pacientes" : "Patients",
+    subtitle: language === "es" ? "Gestione los pacientes del sistema" : "Manage system patients",
+    new: language === "es" ? "Nuevo paciente" : "New Patient",
+    search: language === "es" ? "Buscar pacientes..." : "Search patients...",
+    list: language === "es" ? "Lista" : "List",
+    cards: language === "es" ? "Tarjetas" : "Cards",
+    name: language === "es" ? "Nombre" : "Name",
+    email: language === "es" ? "Email" : "Email",
+    dob: language === "es" ? "Fecha de nacimiento" : "Date of Birth",
+    actions: language === "es" ? "Acciones" : "Actions",
+    edit: language === "es" ? "Editar" : "Edit",
+    delete: language === "es" ? "Eliminar" : "Delete",
+    notFound: language === "es" ? "No se encontraron pacientes" : "No patients found",
+    loading: language === "es" ? "Cargando pacientes..." : "Loading patients...",
+    gender: language === "es" ? "Género" : "Gender",
+    male: language === "es" ? "Masculino" : "Male",
+    female: language === "es" ? "Femenino" : "Female",
+    other: language === "es" ? "Otro" : "Other",
+    unspecified: language === "es" ? "No especificado" : "Unspecified",
+  };
 
   useEffect(() => {
     const fetchPatients = async () => {
@@ -66,13 +90,13 @@ export default function PatientsPage() {
   const getGenderText = (gender) => {
     switch (gender) {
       case "male":
-        return "Masculino"
+        return t.male
       case "female":
-        return "Femenino"
+        return t.female
       case "other":
-        return "Otro"
+        return t.other
       default:
-        return "No especificado"
+        return t.unspecified
     }
   }
 
@@ -81,7 +105,7 @@ export default function PatientsPage() {
       <div className="flex items-center justify-center min-h-screen">
         <div className="flex flex-col items-center space-y-4">
           <Loader2 className="h-8 w-8 animate-spin" />
-          <p className="text-muted-foreground">Cargando pacientes...</p>
+          <p className="text-muted-foreground">{t.loading}</p>
         </div>
       </div>
     )
@@ -91,13 +115,13 @@ export default function PatientsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Pacientes</h1>
-          <p className="text-muted-foreground">Gestione los pacientes del sistema</p>
+          <h1 className="text-3xl font-bold tracking-tight">{t.title}</h1>
+          <p className="text-muted-foreground">{t.subtitle}</p>
         </div>
         <Link href="/admin/patients/new">
           <Button>
             <Plus className="mr-2 h-4 w-4" />
-            Nuevo paciente
+            {t.new}
           </Button>
         </Link>
       </div>
@@ -107,7 +131,7 @@ export default function PatientsPage() {
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
             type="search"
-            placeholder="Buscar pacientes..."
+            placeholder={t.search}
             className="pl-8"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
@@ -117,8 +141,8 @@ export default function PatientsPage() {
 
       <Tabs defaultValue="list" className="w-full">
         <TabsList>
-          <TabsTrigger value="list">Lista</TabsTrigger>
-          <TabsTrigger value="cards">Tarjetas</TabsTrigger>
+          <TabsTrigger value="list">{t.list}</TabsTrigger>
+          <TabsTrigger value="cards">{t.cards}</TabsTrigger>
         </TabsList>
         <TabsContent value="list" className="border-none p-0">
           <Card>
@@ -126,17 +150,17 @@ export default function PatientsPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Nombre</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Fecha de nacimiento</TableHead>
-                    <TableHead className="text-right">Acciones</TableHead>
+                    <TableHead>{t.name}</TableHead>
+                    <TableHead>{t.email}</TableHead>
+                    <TableHead>{t.dob}</TableHead>
+                    <TableHead className="text-right">{t.actions}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredPatients.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={4} className="text-center">
-                        No se encontraron pacientes
+                        {t.notFound}
                       </TableCell>
                     </TableRow>
                   ) : (
@@ -152,7 +176,7 @@ export default function PatientsPage() {
                             <Link href={`/admin/patients/${patient.id}`}>
                               <Button variant="outline" size="icon">
                                 <Edit className="h-4 w-4" />
-                                <span className="sr-only">Editar</span>
+                                <span className="sr-only">{t.edit}</span>
                               </Button>
                             </Link>
                             <Button
@@ -164,7 +188,7 @@ export default function PatientsPage() {
                               }}
                             >
                               <Trash2 className="h-4 w-4" />
-                              <span className="sr-only">Eliminar</span>
+                              <span className="sr-only">{t.delete}</span>
                             </Button>
                           </div>
                         </TableCell>
@@ -179,7 +203,7 @@ export default function PatientsPage() {
         <TabsContent value="cards" className="border-none p-0">
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {filteredPatients.length === 0 ? (
-              <p className="col-span-full text-center">No se encontraron pacientes</p>
+              <p className="col-span-full text-center">{t.notFound}</p>
             ) : (
               filteredPatients.map((patient) => (
                 <Card key={patient.id} className="overflow-hidden">
@@ -196,15 +220,15 @@ export default function PatientsPage() {
                   <CardContent className="p-6">
                     <div className="space-y-2">
                       <div className="flex justify-between">
-                        <span className="text-sm font-medium">Email:</span>
+                        <span className="text-sm font-medium">{t.email}:</span>
                         <span className="text-sm">{patient.email}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-sm font-medium">Fecha de nacimiento:</span>
+                        <span className="text-sm font-medium">{t.dob}:</span>
                         <span className="text-sm">{new Date(patient.date_of_birth).toLocaleDateString()}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-sm font-medium">Género:</span>
+                        <span className="text-sm font-medium">{t.gender}:</span>
                         <span className="text-sm">{getGenderText(patient.gender)}</span>
                       </div>
                     </div>
@@ -212,7 +236,7 @@ export default function PatientsPage() {
                       <Link href={`/admin/patients/${patient.id}`}>
                         <Button variant="outline" size="sm">
                           <Edit className="mr-2 h-4 w-4" />
-                          Editar
+                          {t.edit}
                         </Button>
                       </Link>
                       <Button
@@ -224,7 +248,7 @@ export default function PatientsPage() {
                         }}
                       >
                         <Trash2 className="mr-2 h-4 w-4" />
-                        Eliminar
+                        {t.delete}
                       </Button>
                     </div>
                   </CardContent>

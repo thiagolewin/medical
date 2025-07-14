@@ -14,6 +14,7 @@ import Link from "next/link"
 import { nationalitiesApi } from "@/lib/api"
 import { config } from "@/lib/config"
 import { authUtils } from "@/lib/auth"
+import { useLanguage } from "@/lib/language-context"
 
 export default function NewPatientPage() {
   const router = useRouter()
@@ -33,6 +34,35 @@ export default function NewPatientPage() {
 
   const user = typeof window !== "undefined" ? authUtils.getUser() : null;
   const isViewer = user?.role === "viewer";
+
+  const { language } = useLanguage();
+  const t = {
+    title: language === "es" ? "Nuevo paciente" : "New Patient",
+    subtitle: language === "es" ? "Registre un nuevo paciente en el sistema" : "Register a new patient in the system",
+    save: language === "es" ? "Guardar paciente" : "Save patient",
+    saving: language === "es" ? "Guardando..." : "Saving...",
+    cancel: language === "es" ? "Cancelar" : "Cancel",
+    info: language === "es" ? "Información del paciente" : "Patient Information",
+    infoDesc: language === "es" ? "Ingrese los datos básicos del paciente" : "Enter the patient's basic information",
+    firstName: language === "es" ? "Nombre" : "First Name",
+    lastName: language === "es" ? "Apellido" : "Last Name",
+    username: language === "es" ? "Nombre de usuario" : "Username",
+    password: language === "es" ? "Contraseña" : "Password",
+    nationality: language === "es" ? "Nacionalidad" : "Nationality",
+    dob: language === "es" ? "Fecha de nacimiento" : "Date of Birth",
+    email: language === "es" ? "Correo electrónico" : "Email",
+    phone: language === "es" ? "Teléfono" : "Phone",
+    required: language === "es" ? "*" : "*",
+    requiredInfo: language === "es" ? "Todos los campos marcados con (*) son obligatorios" : "All fields marked with (*) are required",
+    uniqueUsername: language === "es" ? "El nombre de usuario debe ser único en el sistema" : "Username must be unique in the system",
+    passwordLength: language === "es" ? "La contraseña debe tener al menos 6 caracteres" : "Password must be at least 6 characters",
+    emailFormat: language === "es" ? "El email debe tener un formato válido" : "Email must be valid",
+    phoneFormat: language === "es" ? "El teléfono debe incluir el código de país" : "Phone must include country code",
+    success: language === "es" ? "Paciente creado exitosamente" : "Patient created successfully",
+    error: language === "es" ? "Error al crear el paciente. Por favor, inténtelo de nuevo." : "Error creating patient. Please try again.",
+    loading: language === "es" ? "Cargando..." : "Loading...",
+    noPermission: language === "es" ? "No tiene permisos para crear pacientes." : "You do not have permission to create patients.",
+  };
 
   useEffect(() => {
     const fetchNationalities = async () => {
@@ -142,8 +172,8 @@ export default function NewPatientPage() {
             </Button>
           </Link>
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Nuevo paciente</h1>
-            <p className="text-muted-foreground">Registre un nuevo paciente en el sistema</p>
+            <h1 className="text-3xl font-bold tracking-tight">{t.title}</h1>
+            <p className="text-muted-foreground">{t.subtitle}</p>
           </div>
         </div>
         { !isViewer && (
@@ -151,12 +181,12 @@ export default function NewPatientPage() {
             {isSaving ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Guardando...
+                {t.saving}
               </>
             ) : (
               <>
                 <Save className="mr-2 h-4 w-4" />
-                Guardar paciente
+                {t.save}
               </>
             )}
           </Button>
@@ -166,41 +196,41 @@ export default function NewPatientPage() {
       { isViewer && (
         <div className="bg-yellow-100 border border-yellow-200 rounded-lg p-4">
           <h4 className="text-sm font-medium text-yellow-900 mb-2">Atención</h4>
-          <p className="text-sm text-yellow-800">No tiene permisos para crear pacientes.</p>
+          <p className="text-sm text-yellow-800">{t.noPermission}</p>
         </div>
       )}
 
       <Card>
         <CardHeader>
-          <CardTitle>Información del paciente</CardTitle>
-          <CardDescription>Ingrese los datos básicos del paciente</CardDescription>
+          <CardTitle>{t.info}</CardTitle>
+          <CardDescription>{t.infoDesc}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="firstName">
-                Nombre <span className="text-red-500">*</span>
+                {t.firstName} {t.required}
               </Label>
               <Input
                 id="firstName"
                 name="firstName"
                 value={patient.firstName}
                 onChange={handleInputChange}
-                placeholder="Ingrese el nombre"
+                placeholder={`${t.firstName} ${t.required}`}
                 required
                 disabled={isViewer}
               />
             </div>
             <div className="space-y-2">
               <Label htmlFor="lastName">
-                Apellido <span className="text-red-500">*</span>
+                {t.lastName} {t.required}
               </Label>
               <Input
                 id="lastName"
                 name="lastName"
                 value={patient.lastName}
                 onChange={handleInputChange}
-                placeholder="Ingrese el apellido"
+                placeholder={`${t.lastName} ${t.required}`}
                 required
                 disabled={isViewer}
               />
@@ -210,21 +240,21 @@ export default function NewPatientPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="username">
-                Nombre de usuario <span className="text-red-500">*</span>
+                {t.username} {t.required}
               </Label>
               <Input
                 id="username"
                 name="username"
                 value={patient.username}
                 onChange={handleInputChange}
-                placeholder="Ingrese el nombre de usuario"
+                placeholder={`${t.username} ${t.required}`}
                 required
                 disabled={isViewer}
               />
             </div>
             <div className="space-y-2">
               <Label htmlFor="password">
-                Contraseña <span className="text-red-500">*</span>
+                {t.password} {t.required}
               </Label>
               <Input
                 id="password"
@@ -232,7 +262,7 @@ export default function NewPatientPage() {
                 type="password"
                 value={patient.password}
                 onChange={handleInputChange}
-                placeholder="Ingrese la contraseña"
+                placeholder={`${t.password} ${t.required}`}
                 required
                 disabled={isViewer}
               />
@@ -242,7 +272,7 @@ export default function NewPatientPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="nationalityId">
-                Nacionalidad <span className="text-red-500">*</span>
+                {t.nationality} {t.required}
               </Label>
               <Select
                 value={patient.nationalityId}
@@ -250,7 +280,7 @@ export default function NewPatientPage() {
                 disabled={isLoadingNationalities || isViewer}
               >
                 <SelectTrigger id="nationalityId">
-                  <SelectValue placeholder={isLoadingNationalities ? "Cargando..." : "Seleccione nacionalidad"} />
+                  <SelectValue placeholder={isLoadingNationalities ? t.loading : `${t.nationality} ${t.required}`} />
                 </SelectTrigger>
                 <SelectContent>
                   {nationalities.map((nationality) => (
@@ -263,7 +293,7 @@ export default function NewPatientPage() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="dateOfBirth">
-                Fecha de nacimiento <span className="text-red-500">*</span>
+                {t.dob} {t.required}
               </Label>
               <Input
                 id="dateOfBirth"
@@ -280,7 +310,7 @@ export default function NewPatientPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="email">
-                Correo electrónico <span className="text-red-500">*</span>
+                {t.email} {t.required}
               </Label>
               <Input
                 id="email"
@@ -288,21 +318,21 @@ export default function NewPatientPage() {
                 type="email"
                 value={patient.email}
                 onChange={handleInputChange}
-                placeholder="correo@ejemplo.com"
+                placeholder={`${t.email}@ejemplo.com`}
                 required
                 disabled={isViewer}
               />
             </div>
             <div className="space-y-2">
               <Label htmlFor="phone">
-                Teléfono <span className="text-red-500">*</span>
+                {t.phone} {t.required}
               </Label>
               <Input
                 id="phone"
                 name="phone"
                 value={patient.phone}
                 onChange={handleInputChange}
-                placeholder="+54 11 1234-5678"
+                placeholder={`+54 11 1234-5678`}
                 required
                 disabled={isViewer}
               />
@@ -312,11 +342,11 @@ export default function NewPatientPage() {
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
             <h4 className="text-sm font-medium text-blue-900 mb-2">Información importante</h4>
             <ul className="text-sm text-blue-800 space-y-1">
-              <li>• Todos los campos marcados con (*) son obligatorios</li>
-              <li>• El nombre de usuario debe ser único en el sistema</li>
-              <li>• La contraseña debe tener al menos 6 caracteres</li>
-              <li>• El email debe tener un formato válido</li>
-              <li>• El teléfono debe incluir el código de país</li>
+              <li>• {t.requiredInfo}</li>
+              <li>• {t.uniqueUsername}</li>
+              <li>• {t.passwordLength}</li>
+              <li>• {t.emailFormat}</li>
+              <li>• {t.phoneFormat}</li>
             </ul>
           </div>
         </CardContent>
@@ -324,19 +354,19 @@ export default function NewPatientPage() {
 
       <div className="flex justify-end space-x-4">
         <Link href="/admin/patients">
-          <Button variant="outline">Cancelar</Button>
+          <Button variant="outline">{t.cancel}</Button>
         </Link>
         { !isViewer && (
           <Button onClick={savePatient} disabled={isSaving}>
             {isSaving ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Guardando...
+                {t.saving}
               </>
             ) : (
               <>
                 <Save className="mr-2 h-4 w-4" />
-                Guardar paciente
+                {t.save}
               </>
             )}
           </Button>
