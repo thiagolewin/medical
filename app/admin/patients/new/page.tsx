@@ -76,7 +76,6 @@ export default function NewPatientPage() {
           setPatient((prev) => ({ ...prev, nationalityId: defaultNationality.id.toString() }))
         }
       } catch (error) {
-        console.error("Error cargando nacionalidades:", error)
         alert("Error al cargar las nacionalidades")
       } finally {
         setIsLoadingNationalities(false)
@@ -132,8 +131,6 @@ export default function NewPatientPage() {
         phone: patient.phone,
       }
 
-      console.log("Creando paciente:", patientData)
-
       const response = await fetch(`${config.API_BASE_URL}/patients`, {
         method: "POST",
         headers: {
@@ -149,13 +146,11 @@ export default function NewPatientPage() {
       }
 
       const result = await response.json()
-      console.log("Paciente creado:", result)
 
       alert("Paciente creado exitosamente")
       // Redirigir a la lista de pacientes
       router.push("/admin/patients")
     } catch (error) {
-      console.error("Error creating patient:", error)
       alert("Error al crear el paciente. Por favor, inténtelo de nuevo.")
     } finally {
       setIsSaving(false)

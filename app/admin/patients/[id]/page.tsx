@@ -135,22 +135,22 @@ export default function EditPatientPage() {
           throw new Error("Error al cargar datos del paciente")
         }
 
-        const patientData = await patientResponse.json()
+        const patientData = await patientResponse.json();
         setPatient({
-          firstName: patientData.first_name || "",
-          lastName: patientData.last_name || "",
-          nationalityId: patientData.nationality_id?.toString() || "",
-          dateOfBirth: patientData.date_of_birth ? patientData.date_of_birth.split("T")[0] : "",
-          email: patientData.email || "",
-          phone: patientData.phone || "",
+          firstName: patientData.data.first_name || "",
+          lastName: patientData.data.last_name || "",
+          nationalityId: patientData.data.nationality_id?.toString() || "",
+          dateOfBirth: patientData.data.date_of_birth ? patientData.data.date_of_birth.split("T")[0] : "",
+          email: patientData.data.email || "",
+          phone: patientData.data.phone || "",
         })
         setOriginalPatient({
-          firstName: patientData.first_name || "",
-          lastName: patientData.last_name || "",
-          nationalityId: patientData.nationality_id?.toString() || "",
-          dateOfBirth: patientData.date_of_birth ? patientData.date_of_birth.split("T")[0] : "",
-          email: patientData.email || "",
-          phone: patientData.phone || "",
+          firstName: patientData.data.first_name || "",
+          lastName: patientData.data.last_name || "",
+          nationalityId: patientData.data.nationality_id?.toString() || "",
+          dateOfBirth: patientData.data.date_of_birth ? patientData.data.date_of_birth.split("T")[0] : "",
+          email: patientData.data.email || "",
+          phone: patientData.data.phone || "",
         })
 
         // Cargar protocolos del paciente
@@ -163,7 +163,8 @@ export default function EditPatientPage() {
         })
 
         if (protocolsResponse.ok) {
-          const protocols = await protocolsResponse.json()
+          const protocolsJson = await protocolsResponse.json();
+          const protocols = protocolsJson.data;
           setOriginalPatientProtocols(protocols)
           setPatientProtocols(protocols)
 
@@ -182,7 +183,8 @@ export default function EditPatientPage() {
                   },
                 },
               )
-              const availableForms = availableResponse.ok ? await availableResponse.json() : []
+              const availableFormsJson = availableResponse.ok ? await availableResponse.json() : { data: [] };
+              const availableForms = availableFormsJson.data;
 
               // Formularios respondidos
               const respondedResponse = await fetch(
@@ -194,7 +196,8 @@ export default function EditPatientPage() {
                   },
                 },
               )
-              const respondedForms = respondedResponse.ok ? await respondedResponse.json() : []
+              const respondedFormsJson = respondedResponse.ok ? await respondedResponse.json() : { data: [] };
+              const respondedForms = respondedFormsJson.data;
 
               formsData[protocol.protocol_id] = {
                 available: availableForms,
@@ -224,8 +227,6 @@ export default function EditPatientPage() {
   }, [patientId])
 
   const loadAvailableProtocols = async () => {
-    console.log("Cargando protocolos disponibles...")
-    setIsLoadingAvailableProtocols(true)
     try {
       const response = await fetch(`${config.API_BASE_URL}/protocols`, {
         headers: {
@@ -234,16 +235,12 @@ export default function EditPatientPage() {
         },
       })
 
-      console.log("Response status:", response.status)
-
       if (response.ok) {
         const protocols = await response.json()
-        console.log("Protocolos cargados:", protocols)
 
         // Filtrar protocolos que ya están asignados
         const assignedProtocolIds = patientProtocols.map((p: PatientProtocol) => p.protocol_id)
         const available = protocols.filter((p: Protocol) => !assignedProtocolIds.includes(p.id))
-        console.log("Protocolos disponibles después del filtro:", available)
 
         setAvailableProtocols(available)
       } else {
@@ -308,8 +305,6 @@ export default function EditPatientPage() {
       alert("Protocolo no encontrado")
       return
     }
-
-    console.log("Asignando protocolo:", selectedProtocol)
 
     // Agregar a cambios pendientes
     setPendingChanges((prev) => ({
@@ -385,8 +380,6 @@ export default function EditPatientPage() {
         phone: patient.phone,
       }
 
-      console.log("Enviando datos del paciente:", patientData)
-
       const patientResponse = await fetch(`${config.API_BASE_URL}/patients/${patientId}`, {
         method: "PUT",
         headers: {
@@ -404,11 +397,9 @@ export default function EditPatientPage() {
       }
 
       const updatedPatient = await patientResponse.json()
-      console.log("Paciente actualizado:", updatedPatient)
 
       // 2. Desasignar protocolos
       for (const protocolId of pendingChanges.protocolsToRemove) {
-        console.log(`Desasignando protocolo ${protocolId} del paciente ${patientId}`)
         
         // Buscar el registro de asignación para obtener el ID correcto
         const assignmentRecord = originalPatientProtocols.find(p => p.protocol_id === protocolId)
@@ -418,8 +409,6 @@ export default function EditPatientPage() {
           continue
         }
 
-        console.log(`Eliminando asignación con ID: ${assignmentRecord.id}`)
-        
         const unassignResponse = await fetch(`${config.API_BASE_URL}/patient-protocols/${assignmentRecord.id}`, {
           method: "DELETE",
           headers: {
@@ -433,13 +422,10 @@ export default function EditPatientPage() {
           console.error(`Error desasignando protocolo ${protocolId}:`, errorText)
           throw new Error(`Error al desasignar protocolo ${protocolId}: ${unassignResponse.status} ${unassignResponse.statusText}`)
         }
-
-        console.log(`Protocolo ${protocolId} desasignado exitosamente`)
       }
 
       // 3. Asignar nuevos protocolos
       for (const protocolToAdd of pendingChanges.protocolsToAdd) {
-        console.log(`Asignando protocolo ${protocolToAdd.protocol_id} al paciente ${patientId}`)
         
         const assignData = {
           patient_id: patientId,
@@ -447,8 +433,6 @@ export default function EditPatientPage() {
           start_date: formatDateForBackend(protocolToAdd.start_date),
           assigned_by: Number.parseInt(localStorage.getItem("userId") || "1"), // ID del usuario actual
         }
-
-        console.log("Datos de asignación:", assignData)
 
         const assignResponse = await fetch(`${config.API_BASE_URL}/patient-protocols`, {
           method: "POST",
@@ -465,9 +449,6 @@ export default function EditPatientPage() {
           console.error(`Error asignando protocolo ${protocolToAdd.protocol_id}:`, errorText)
           throw new Error(`Error al asignar protocolo ${protocolToAdd.protocol_id}: ${assignResponse.status} ${assignResponse.statusText}`)
         }
-
-        const assignedProtocol = await assignResponse.json()
-        console.log(`Protocolo ${protocolToAdd.protocol_id} asignado exitosamente:`, assignedProtocol)
       }
 
       // Limpiar cambios pendientes
@@ -703,7 +684,6 @@ export default function EditPatientPage() {
               <DialogTrigger asChild>
                 <Button
                   onClick={() => {
-                    console.log("Botón asignar protocolo clickeado")
                     loadAvailableProtocols()
                     setShowAssignDialog(true)
                   }}

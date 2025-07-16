@@ -25,6 +25,7 @@ export default function PatientsPage() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [patientToDelete, setPatientToDelete] = useState<number | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [deletingPatientId, setDeletingPatientId] = useState<number | null>(null);
 
   const { language } = useLanguage();
   const t = {
@@ -56,7 +57,6 @@ export default function PatientsPage() {
         const response = await patientsApi.getPatients()
         setPatients(response || [])
       } catch (error) {
-        console.error("Error fetching patients:", error)
         setPatients([])
       } finally {
         setIsLoading(false)
@@ -76,13 +76,15 @@ export default function PatientsPage() {
   const handleDeletePatient = async () => {
     if (patientToDelete !== null) {
       try {
-        await patientsApi.deletePatient(patientToDelete)
-        setPatients(patients.filter((patient) => patient.id !== patientToDelete))
-        setPatientToDelete(null)
-        setIsDeleteDialogOpen(false)
+        setDeletingPatientId(patientToDelete);
+        await patientsApi.deletePatient(patientToDelete);
+        setPatients(patients.filter((patient) => patient.id !== patientToDelete));
+        setPatientToDelete(null);
+        setIsDeleteDialogOpen(false);
       } catch (error) {
-        console.error("Error eliminando paciente:", error)
-        alert("Error al eliminar el paciente. Por favor, inténtelo de nuevo.")
+        alert("Error al eliminar el paciente. Por favor, inténtelo de nuevo.");
+      } finally {
+        setDeletingPatientId(null);
       }
     }
   }

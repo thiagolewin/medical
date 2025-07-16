@@ -26,15 +26,12 @@ function PatientLayoutContent({ children }: PatientLayoutProps) {
 
     // Verificar autenticación del paciente
     const checkAuth = () => {
-      console.log("Verificando autenticación del paciente...")
       const authenticated = patientAuthUtils.isPatientAuthenticated()
-      console.log("¿Está autenticado?", authenticated)
 
       setIsAuthenticated(authenticated)
       setIsLoading(false)
 
       if (!authenticated) {
-        console.log("No autenticado, redirigiendo a login...")
         router.push("/patient/login")
       }
     }
@@ -43,7 +40,6 @@ function PatientLayoutContent({ children }: PatientLayoutProps) {
   }, [router])
 
   const handleLogout = () => {
-    console.log("Cerrando sesión del paciente...")
     patientAuthUtils.clearPatientAuth()
     router.push("/patient/login")
   }

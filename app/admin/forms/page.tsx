@@ -8,7 +8,8 @@ import { Input } from "@/components/ui/input"
 import { Plus, Search, Edit, Trash2, FileText, HelpCircle, Loader2 } from "lucide-react"
 import Link from "next/link"
 import { formsApi, questionsApi } from "@/lib/api"
-import { useLanguage } from "@/lib/language-context"
+import { useTranslation } from "@/lib/language-context"
+import { handleApiResponse } from "@/lib/api";
 import { authUtils } from "@/lib/auth"
 import { config } from "@/lib/config";
 
@@ -25,12 +26,13 @@ interface Form {
 }
 
 export default function FormsPage() {
-  const { language } = useLanguage()
+  const { t, language } = useTranslation();
   const [forms, setForms] = useState<Form[]>([])
   const [filteredForms, setFilteredForms] = useState<Form[]>([])
   const [searchTerm, setSearchTerm] = useState("")
   const [isLoading, setIsLoading] = useState(true)
   const [loadingQuestions, setLoadingQuestions] = useState<Record<number, boolean>>({})
+  const [deletingFormId, setDeletingFormId] = useState<number | null>(null);
 
   // --- Nueva sección: Enviar Query SQL ---
   const [query, setQuery] = useState("");
@@ -56,7 +58,7 @@ export default function FormsPage() {
         const errorText = await response.text();
         throw new Error(errorText || `Error ${response.status}`);
       }
-      const data = await response.json();
+      const data = await handleApiResponse(response);
       setQueryResult(data);
     } catch (err: any) {
       setQueryError(err.message || "Error al enviar la consulta");
@@ -69,22 +71,19 @@ export default function FormsPage() {
     const fetchForms = async () => {
       try {
         setIsLoading(true)
-        const formsData = await formsApi.getForms()
-        console.log("Formularios cargados:", formsData)
+        const data = await formsApi.getForms();
 
         // Cargar el conteo de preguntas para cada formulario
         const formsWithQuestionCount = await Promise.all(
-          formsData.map(async (form) => {
+          data.map(async (form: Form) => {
             try {
               setLoadingQuestions((prev) => ({ ...prev, [form.id]: true }))
               const questions = await questionsApi.getQuestionsByForm(form.id)
-              console.log(`Preguntas para formulario ${form.id}:`, questions)
               return {
                 ...form,
                 question_count: questions.length,
               }
             } catch (error) {
-              console.error(`Error cargando preguntas para formulario ${form.id}:`, error)
               return {
                 ...form,
                 question_count: 0,
@@ -98,7 +97,6 @@ export default function FormsPage() {
         setForms(formsWithQuestionCount)
         setFilteredForms(formsWithQuestionCount)
       } catch (error) {
-        console.error("Error cargando formularios:", error)
         setForms([])
         setFilteredForms([])
       } finally {
@@ -128,19 +126,21 @@ export default function FormsPage() {
       )
     ) {
       try {
-        await formsApi.deleteForm(id)
-        const updatedForms = forms.filter((form) => form.id !== id)
-        setForms(updatedForms)
-        setFilteredForms(updatedForms)
+        setDeletingFormId(id);
+        await formsApi.deleteForm(id);
+        const updatedForms = forms.filter((form) => form.id !== id);
+        setForms(updatedForms);
+        setFilteredForms(updatedForms);
       } catch (error) {
-        console.error("Error eliminando formulario:", error)
-        alert(language === "es" ? "Error al eliminar el formulario" : "Error deleting form")
+        alert(language === "es" ? "Error al eliminar el formulario" : "Error deleting form");
+      } finally {
+        setDeletingFormId(null);
       }
     }
-  }
+  };
 
   const user = typeof window !== "undefined" ? authUtils.getUser() : null;
-  const isViewer = user?.role === "viewer";
+  const isAdmin = user?.role === "admin";
 
   if (isLoading) {
     return (
@@ -157,12 +157,12 @@ export default function FormsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">{language === "es" ? "Formularios" : "Forms"}</h1>
+          <h1 className="text-3xl font-bold tracking-tight">{t('forms')}</h1>
           <p className="text-muted-foreground">
-            {language === "es" ? "Gestione los formularios del sistema médico" : "Manage medical system forms"}
+            {t('manage_medical_system_forms')}
           </p>
         </div>
-        { !isViewer && <Link href="/admin/forms/new"><Button>Nuevo formulario</Button></Link> }
+        {isAdmin && <Link href="/admin/forms/new"><Button>{language === "es" ? "Nuevo formulario" : "New form"}</Button></Link>}
       </div>
 
       <div className="flex items-center space-x-2">
@@ -170,7 +170,7 @@ export default function FormsPage() {
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
             type="search"
-            placeholder={language === "es" ? "Buscar formularios..." : "Search forms..."}
+            placeholder={t('search_forms')}
             className="pl-8"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
@@ -183,19 +183,17 @@ export default function FormsPage() {
           <CardContent className="flex flex-col items-center justify-center p-6">
             <FileText className="h-12 w-12 text-muted-foreground mb-4" />
             <h3 className="text-lg font-semibold mb-2">
-              {language === "es" ? "No hay formularios" : "No forms found"}
+              {t('no_forms_found')}
             </h3>
             <p className="text-muted-foreground text-center mb-4">
-              {language === "es"
-                ? "No se encontraron formularios. Cree uno nuevo para comenzar."
-                : "No forms found. Create a new one to get started."}
+              {t('no_forms_found_message')}
             </p>
-            { !isViewer && <Link href="/admin/forms/new"><Button>Crear primer formulario</Button></Link> }
+            {isAdmin && <Link href="/admin/forms/new"><Button>Crear primer formulario</Button></Link>}
           </CardContent>
         </Card>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {filteredForms.map((form) => (
+          {filteredForms.map((form: Form) => (
             <Card key={form.id} className="hover:shadow-md transition-shadow">
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between">
@@ -228,15 +226,22 @@ export default function FormsPage() {
                     {language === "es" ? "Creado:" : "Created:"} {new Date(form.created_at).toLocaleDateString()}
                   </div>
                   <div className="flex space-x-2">
-                    { !isViewer && <Link href={`/admin/forms/${form.id}`}><Button variant="outline" size="sm"><Edit className="h-4 w-4" /></Button></Link> }
-                    { !isViewer && <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => deleteForm(form.id)}
-                      className="text-red-600 hover:text-red-700"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button> }
+                    {isAdmin && <Link href={`/admin/forms/${form.id}`}><Button variant="outline" size="sm"><Edit className="h-4 w-4" /></Button></Link>}
+                    {isAdmin && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => deleteForm(form.id)}
+                        className="text-red-600 hover:text-red-700"
+                        disabled={deletingFormId === form.id}
+                      >
+                        {deletingFormId === form.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="h-4 w-4" />
+                        )}
+                      </Button>
+                    )}
                   </div>
                 </div>
               </CardContent>
@@ -247,18 +252,18 @@ export default function FormsPage() {
 
       {/* Nueva sección: Enviar Query SQL */}
       <section style={{ marginTop: 32, marginBottom: 32, padding: 24, border: "1px solid #eee", borderRadius: 8 }}>
-        <h2 style={{ fontWeight: 600, fontSize: 20, marginBottom: 12 }}>Enviar Query SQL</h2>
+        <h2 style={{ fontWeight: 600, fontSize: 20, marginBottom: 12 }}>{t('send_sql_query')}</h2>
         <form onSubmit={handleQuerySubmit} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           <textarea
             value={query}
             onChange={e => setQuery(e.target.value)}
-            placeholder="Escribe tu consulta SQL aquí..."
+            placeholder={t('write_sql_query_placeholder')}
             rows={4}
             style={{ fontFamily: "monospace", fontSize: 16, padding: 8 }}
             required
           />
           <button type="submit" disabled={isQueryLoading} style={{ padding: "8px 16px", fontWeight: 600 }}>
-            {isQueryLoading ? "Enviando..." : "Enviar Query"}
+            {isQueryLoading ? "Enviando..." : t('send_sql_query_button')}
           </button>
         </form>
         {queryError && <div style={{ color: "red", marginTop: 8 }}>Error: {queryError}</div>}

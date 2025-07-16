@@ -1,457 +1,265 @@
-"use client"
+"use client";
 
-import { useState, useEffect } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { Badge } from "@/components/ui/badge"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { UserCog, Plus, Edit, Trash2, Eye, EyeOff } from "lucide-react"
-import { useLanguage } from "@/lib/language-context"
-import { usersApi } from "@/lib/api"
-import { authUtils } from "@/lib/auth"
+import { useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Edit, Trash2, Plus, Loader2 } from "lucide-react";
+import { config } from "@/lib/config";
+import { authUtils } from "@/lib/auth";
+import { handleApiResponse } from "@/lib/api";
 
 interface User {
-  id: number
-  username: string
-  email: string
-  role: "admin" | "editor" | "viewer"
-  created_at?: string
-  updated_at?: string
+  id: number;
+  username: string;
+  email: string;
+  role: "admin" | "editor" | "viewer";
 }
 
-interface UserFormData {
-  username: string
-  email: string
-  password: string
-  role: string
+interface UserForm extends User {
+  password?: string;
 }
+
+const emptyUser: Partial<UserForm> = {
+  username: "",
+  email: "",
+  password: "",
+  role: "editor",
+};
 
 export default function UsersPage() {
-  const { language } = useLanguage()
-  const [users, setUsers] = useState<User[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string>("")
-  const [success, setSuccess] = useState<string>("")
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
-  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
-  const [editingUser, setEditingUser] = useState<User | null>(null)
-  const [showPassword, setShowPassword] = useState(false)
-  const [formData, setFormData] = useState<UserFormData>({
-    username: "",
-    email: "",
-    password: "",
-    role: "viewer",
-  })
-
-  const t = {
-    title: language === "es" ? "Gestión de Usuarios" : "User Management",
-    subtitle: language === "es" ? "Administra los usuarios del sistema" : "Manage system users",
-    createUser: language === "es" ? "Crear Usuario" : "Create User",
-    editUser: language === "es" ? "Editar Usuario" : "Edit User",
-    username: language === "es" ? "Nombre de usuario" : "Username",
-    email: language === "es" ? "Correo electrónico" : "Email",
-    password: language === "es" ? "Contraseña" : "Password",
-    role: language === "es" ? "Rol" : "Role",
-    actions: language === "es" ? "Acciones" : "Actions",
-    admin: language === "es" ? "Administrador" : "Admin",
-    editor: language === "es" ? "Editor" : "Editor",
-    viewer: language === "es" ? "Visualizador" : "Viewer",
-    save: language === "es" ? "Guardar" : "Save",
-    cancel: language === "es" ? "Cancelar" : "Cancel",
-    edit: language === "es" ? "Editar" : "Edit",
-    delete: language === "es" ? "Eliminar" : "Delete",
-    confirmDelete:
-      language === "es" ? "¿Estás seguro de eliminar este usuario?" : "Are you sure you want to delete this user?",
-    loading: language === "es" ? "Cargando..." : "Loading...",
-    noUsers: language === "es" ? "No hay usuarios registrados" : "No users registered",
-    errorLoading: language === "es" ? "Error al cargar usuarios" : "Error loading users",
-    errorCreating: language === "es" ? "Error al crear usuario" : "Error creating user",
-    errorUpdating: language === "es" ? "Error al actualizar usuario" : "Error updating user",
-    errorDeleting: language === "es" ? "Error al eliminar usuario" : "Error deleting user",
-    userCreated: language === "es" ? "Usuario creado exitosamente" : "User created successfully",
-    userUpdated: language === "es" ? "Usuario actualizado exitosamente" : "User updated successfully",
-    userDeleted: language === "es" ? "Usuario eliminado exitosamente" : "User deleted successfully",
-    showPassword: language === "es" ? "Mostrar contraseña" : "Show password",
-    hidePassword: language === "es" ? "Ocultar contraseña" : "Hide password",
-    enterUsername: language === "es" ? "Ingrese nombre de usuario" : "Enter username",
-    enterEmail: language === "es" ? "Ingrese correo electrónico" : "Enter email",
-    enterPassword: language === "es" ? "Ingrese contraseña" : "Enter password",
-    selectRole: language === "es" ? "Seleccionar rol" : "Select role",
-    creating: language === "es" ? "Creando..." : "Creating...",
-    updating: language === "es" ? "Actualizando..." : "Updating...",
-    deleting: language === "es" ? "Eliminando..." : "Deleting...",
-  }
-
-  const isAdmin = authUtils.isAdmin()
+  const [users, setUsers] = useState<User[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [showForm, setShowForm] = useState(false);
+  const [formUser, setFormUser] = useState<Partial<UserForm>>(emptyUser);
+  const [isEditing, setIsEditing] = useState(false);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [actionLoadingId, setActionLoadingId] = useState<number | null>(null);
 
   useEffect(() => {
-    if (!isAdmin) {
-      setError(
-        language === "es"
-          ? "No tienes permisos para acceder a esta sección"
-          : "You don't have permission to access this section",
-      )
-      return
-    }
-    loadUsers()
-  }, [isAdmin, language])
+    setCurrentUser(authUtils.getUser());
+    fetchUsers();
+  }, []);
 
-  const loadUsers = async () => {
+  const fetchUsers = async () => {
+    setIsLoading(true);
+    setError("");
     try {
-      setLoading(true)
-      setError("")
-      const data = await usersApi.getUsers()
-      setUsers(data)
-    } catch (err) {
-      setError(`${t.errorLoading}: ${err}`)
+      const res = await fetch(`${config.API_BASE_URL}/users`, {
+        headers: { "ngrok-skip-browser-warning": "true" },
+      });
+      if (!res.ok) throw new Error("Error al cargar usuarios");
+      const data = await handleApiResponse(res);
+      setUsers(data);
+    } catch (err: any) {
+      setError(err.message || "Error al cargar usuarios");
     } finally {
-      setLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
-  const handleCreateUser = async () => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    setFormUser({ ...formUser, [e.target.name]: e.target.value });
+  };
+
+  const handleCreate = () => {
+    setFormUser(emptyUser);
+    setIsEditing(false);
+    setShowForm(true);
+  };
+
+  const handleEdit = (user: User) => {
+    setFormUser(user);
+    setIsEditing(true);
+    setShowForm(true);
+  };
+
+  const handleDelete = async (id: number) => {
+    if (!window.confirm("¿Seguro que desea eliminar este usuario?")) return;
     try {
-      setLoading(true)
-      setError("")
-      setSuccess("")
+      setActionLoadingId(id);
+      const res = await fetch(`${config.API_BASE_URL}/users/${id}`, {
+        method: "DELETE",
+        headers: { "ngrok-skip-browser-warning": "true" },
+      });
+      if (!res.ok) throw new Error("Error al eliminar usuario");
+      setUsers(users.filter((u) => u.id !== id));
+    } catch (err: any) {
+      setError(err.message || "Error al eliminar usuario");
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
 
-      if (!formData.username || !formData.email || !formData.password) {
-        setError(language === "es" ? "Todos los campos son obligatorios" : "All fields are required")
-        return
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setActionLoadingId(formUser.id || 0);
+    try {
+      if (isEditing && formUser.id) {
+        // Editar usuario
+        const { username, email, role } = formUser;
+        const res = await fetch(`${config.API_BASE_URL}/users/${formUser.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json", "ngrok-skip-browser-warning": "true" },
+          body: JSON.stringify({ username, email, role }),
+        });
+        if (!res.ok) throw new Error("Error al editar usuario");
+        setUsers(users.map((u) => (u.id === formUser.id ? { ...u, username, email, role } : u)));
+      } else {
+        // Crear usuario
+        const { username, email, password, role } = formUser;
+        const res = await fetch(`${config.API_BASE_URL}/users/register`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "ngrok-skip-browser-warning": "true" },
+          body: JSON.stringify({ username, email, password, role }),
+        });
+        if (!res.ok) throw new Error("Error al crear usuario");
+        const newUser = await res.json();
+        setUsers([...users, newUser.data]);
       }
-
-      await usersApi.createUser({
-        username: formData.username,
-        email: formData.email,
-        password: formData.password,
-        role: formData.role,
-      })
-
-      setSuccess(t.userCreated)
-      setIsCreateDialogOpen(false)
-      setFormData({ username: "", email: "", password: "", role: "viewer" })
-      await loadUsers()
-    } catch (err) {
-      setError(`${t.errorCreating}: ${err}`)
+      setShowForm(false);
+    } catch (err: any) {
+      setError(err.message || "Error al guardar usuario");
     } finally {
-      setLoading(false)
+      setActionLoadingId(null);
     }
-  }
+  };
 
-  const handleEditUser = async () => {
-    if (!editingUser) return
-
-    try {
-      setLoading(true)
-      setError("")
-      setSuccess("")
-
-      if (!formData.username || !formData.email) {
-        setError(language === "es" ? "Nombre de usuario y email son obligatorios" : "Username and email are required")
-        return
-      }
-
-      await usersApi.updateUser(editingUser.id, {
-        username: formData.username,
-        email: formData.email,
-        role: formData.role,
-      })
-
-      setSuccess(t.userUpdated)
-      setIsEditDialogOpen(false)
-      setEditingUser(null)
-      setFormData({ username: "", email: "", password: "", role: "viewer" })
-      await loadUsers()
-    } catch (err) {
-      setError(`${t.errorUpdating}: ${err}`)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleDeleteUser = async (userId: number) => {
-    if (!confirm(t.confirmDelete)) return
-
-    try {
-      setLoading(true)
-      setError("")
-      setSuccess("")
-
-      await usersApi.deleteUser(userId)
-      setSuccess(t.userDeleted)
-      await loadUsers()
-    } catch (err) {
-      setError(`${t.errorDeleting}: ${err}`)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const openEditDialog = (user: User) => {
-    setEditingUser(user)
-    setFormData({
-      username: user.username,
-      email: user.email,
-      password: "",
-      role: user.role,
-    })
-    setIsEditDialogOpen(true)
-  }
-
-  const getRoleBadgeVariant = (role: string) => {
-    switch (role) {
-      case "admin":
-        return "destructive"
-      case "editor":
-        return "default"
-      case "viewer":
-        return "secondary"
-      default:
-        return "outline"
-    }
-  }
-
-  const getRoleText = (role: string) => {
-    switch (role) {
-      case "admin":
-        return t.admin
-      case "editor":
-        return t.editor
-      case "viewer":
-        return t.viewer
-      default:
-        return role
-    }
-  }
-
-  if (!isAdmin) {
-    return (
-      <div className="container mx-auto p-6">
-        <Alert variant="destructive">
-          <AlertDescription>
-            {language === "es"
-              ? "No tienes permisos para acceder a esta sección"
-              : "You don't have permission to access this section"}
-          </AlertDescription>
-        </Alert>
-      </div>
-    )
-  }
+  const canEdit = currentUser?.role === "admin";
+  const canDelete = currentUser?.role === "admin";
+  const canCreate = currentUser?.role === "admin" || currentUser?.role === "editor";
+  const canView = true;
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold flex items-center gap-2">
-            <UserCog className="w-8 h-8" />
-            {t.title}
-          </h1>
-          <p className="text-gray-600 mt-2">{t.subtitle}</p>
+        <h1 className="text-3xl font-bold tracking-tight">Usuarios</h1>
+        {canCreate && (
+          <Button onClick={handleCreate}>
+            <Plus className="h-4 w-4 mr-2" /> Nuevo usuario
+          </Button>
+        )}
+      </div>
+      {isLoading ? (
+        <div className="flex items-center justify-center min-h-[200px]">
+          <Loader2 className="h-8 w-8 animate-spin" />
         </div>
-
-        <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="w-4 h-4 mr-2" />
-              {t.createUser}
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>{t.createUser}</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4">
+      ) : error ? (
+        <div className="text-red-600">{error}</div>
+      ) : (
+        <Card>
+          <CardHeader>
+            <CardTitle>Lista de usuarios</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr>
+                    <th className="text-left p-2">ID</th>
+                    <th className="text-left p-2">Usuario</th>
+                    <th className="text-left p-2">Email</th>
+                    <th className="text-left p-2">Rol</th>
+                    <th className="text-left p-2">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {users.map((user) => (
+                    <tr key={user.id} className="border-b">
+                      <td className="p-2">{user.id}</td>
+                      <td className="p-2">{user.username}</td>
+                      <td className="p-2">{user.email}</td>
+                      <td className="p-2">{user.role}</td>
+                      <td className="p-2 space-x-2">
+                        {canEdit && (
+                          <Button size="sm" variant="outline" onClick={() => handleEdit(user)}>
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                        )}
+                        {canDelete && (
+                          <Button size="sm" variant="outline" onClick={() => handleDelete(user.id)} className="text-red-600 hover:text-red-700">
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+      {showForm && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-lg p-8 w-full max-w-md">
+            <h2 className="text-xl font-bold mb-4">{isEditing ? "Editar usuario" : "Nuevo usuario"}</h2>
+            <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <Label htmlFor="username">{t.username}</Label>
+                <Label htmlFor="username">Usuario</Label>
                 <Input
                   id="username"
-                  placeholder={t.enterUsername}
-                  value={formData.username}
-                  onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                  name="username"
+                  value={formUser.username || ""}
+                  onChange={handleInputChange}
+                  required
                 />
               </div>
               <div>
-                <Label htmlFor="email">{t.email}</Label>
+                <Label htmlFor="email">Email</Label>
                 <Input
                   id="email"
+                  name="email"
                   type="email"
-                  placeholder={t.enterEmail}
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  value={formUser.email || ""}
+                  onChange={handleInputChange}
+                  required
                 />
               </div>
-              <div>
-                <Label htmlFor="password">{t.password}</Label>
-                <div className="relative">
+              {!isEditing && (
+                <div>
+                  <Label htmlFor="password">Contraseña</Label>
                   <Input
                     id="password"
-                    type={showPassword ? "text" : "password"}
-                    placeholder={t.enterPassword}
-                    value={formData.password}
-                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                    name="password"
+                    type="password"
+                    value={formUser.password || ""}
+                    onChange={handleInputChange}
+                    required
                   />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-                    onClick={() => setShowPassword(!showPassword)}
-                  >
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                    <span className="sr-only">{showPassword ? t.hidePassword : t.showPassword}</span>
-                  </Button>
                 </div>
-              </div>
+              )}
               <div>
-                <Label htmlFor="role">{t.role}</Label>
-                <Select value={formData.role} onValueChange={(value) => setFormData({ ...formData, role: value })}>
-                  <SelectTrigger>
-                    <SelectValue placeholder={t.selectRole} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="admin">{t.admin}</SelectItem>
-                    <SelectItem value="editor">{t.editor}</SelectItem>
-                    <SelectItem value="viewer">{t.viewer}</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Label htmlFor="role">Rol</Label>
+                <select
+                  id="role"
+                  name="role"
+                  value={formUser.role || "editor"}
+                  onChange={handleInputChange}
+                  required
+                  disabled={currentUser?.role !== "admin"}
+                >
+                  <option value="admin">Admin</option>
+                  <option value="editor">Editor</option>
+                  <option value="viewer">Viewer</option>
+                </select>
               </div>
               <div className="flex justify-end space-x-2">
-                <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
-                  {t.cancel}
+                <Button type="button" variant="outline" onClick={() => setShowForm(false)}>
+                  Cancelar
                 </Button>
-                <Button onClick={handleCreateUser} disabled={loading}>
-                  {loading ? t.creating : t.save}
+                <Button type="submit" disabled={isLoading || actionLoadingId === formUser.id}>
+                  {isEditing ? "Guardar cambios" : "Crear usuario"}
                 </Button>
               </div>
-            </div>
-          </DialogContent>
-        </Dialog>
-      </div>
-
-      {error && (
-        <Alert variant="destructive">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
-
-      {success && (
-        <Alert>
-          <AlertDescription>{success}</AlertDescription>
-        </Alert>
-      )}
-
-      <Card>
-        <CardHeader>
-          <CardTitle>{language === "es" ? "Lista de Usuarios" : "User List"}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="flex items-center justify-center py-8">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-              <span className="ml-2">{t.loading}</span>
-            </div>
-          ) : users.length === 0 ? (
-            <div className="text-center py-8">
-              <p className="text-gray-500">{t.noUsers}</p>
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>ID</TableHead>
-                  <TableHead>{t.username}</TableHead>
-                  <TableHead>{t.email}</TableHead>
-                  <TableHead>{t.role}</TableHead>
-                  <TableHead>{t.actions}</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {users.map((user) => (
-                  <TableRow key={user.id}>
-                    <TableCell className="font-medium">{user.id}</TableCell>
-                    <TableCell>{user.username}</TableCell>
-                    <TableCell>{user.email}</TableCell>
-                    <TableCell>
-                      <Badge variant={getRoleBadgeVariant(user.role)}>{getRoleText(user.role)}</Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex space-x-2">
-                        <Button variant="outline" size="sm" onClick={() => openEditDialog(user)}>
-                          <Edit className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleDeleteUser(user.id)}
-                          className="text-red-600 hover:text-red-700"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Edit User Dialog */}
-      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t.editUser}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="edit-username">{t.username}</Label>
-              <Input
-                id="edit-username"
-                placeholder={t.enterUsername}
-                value={formData.username}
-                onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-              />
-            </div>
-            <div>
-              <Label htmlFor="edit-email">{t.email}</Label>
-              <Input
-                id="edit-email"
-                type="email"
-                placeholder={t.enterEmail}
-                value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-              />
-            </div>
-            <div>
-              <Label htmlFor="edit-role">{t.role}</Label>
-              <Select value={formData.role} onValueChange={(value) => setFormData({ ...formData, role: value })}>
-                <SelectTrigger>
-                  <SelectValue placeholder={t.selectRole} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="admin">{t.admin}</SelectItem>
-                  <SelectItem value="editor">{t.editor}</SelectItem>
-                  <SelectItem value="viewer">{t.viewer}</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex justify-end space-x-2">
-              <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
-                {t.cancel}
-              </Button>
-              <Button onClick={handleEditUser} disabled={loading}>
-                {loading ? t.updating : t.save}
-              </Button>
-            </div>
+              {error && <div className="text-red-600 mt-2">{error}</div>}
+            </form>
           </div>
-        </DialogContent>
-      </Dialog>
+        </div>
+      )}
     </div>
-  )
+  );
 }

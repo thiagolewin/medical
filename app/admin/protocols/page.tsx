@@ -30,16 +30,17 @@ export default function ProtocolsPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [isLoading, setIsLoading] = useState(true)
   const [loadingForms, setLoadingForms] = useState<Record<number, boolean>>({})
+  const [deletingProtocolId, setDeletingProtocolId] = useState<number | null>(null);
 
   const user = typeof window !== "undefined" ? authUtils.getUser() : null;
   const isViewer = user?.role === "viewer";
+  const isAdmin = user?.role === "admin";
 
   useEffect(() => {
     const fetchProtocols = async () => {
       try {
         setIsLoading(true)
         const protocolsData = await protocolsApi.getProtocols()
-        console.log("Protocolos cargados:", protocolsData)
 
         // Cargar el conteo de formularios para cada protocolo
         const protocolsWithFormCount = await Promise.all(
@@ -47,13 +48,11 @@ export default function ProtocolsPage() {
             try {
               setLoadingForms((prev) => ({ ...prev, [protocol.id]: true }))
               const forms = await protocolsApi.getProtocolForms(protocol.id)
-              console.log(`Formularios para protocolo ${protocol.id}:`, forms)
               return {
                 ...protocol,
                 form_count: forms.length,
               }
             } catch (error) {
-              console.error(`Error cargando formularios para protocolo ${protocol.id}:`, error)
               return {
                 ...protocol,
                 form_count: 0,
@@ -67,7 +66,6 @@ export default function ProtocolsPage() {
         setProtocols(protocolsWithFormCount)
         setFilteredProtocols(protocolsWithFormCount)
       } catch (error) {
-        console.error("Error cargando protocolos:", error)
         setProtocols([])
         setFilteredProtocols([])
       } finally {
@@ -97,16 +95,18 @@ export default function ProtocolsPage() {
       )
     ) {
       try {
-        await protocolsApi.deleteProtocol(id)
-        const updatedProtocols = protocols.filter((protocol) => protocol.id !== id)
-        setProtocols(updatedProtocols)
-        setFilteredProtocols(updatedProtocols)
+        setDeletingProtocolId(id);
+        await protocolsApi.deleteProtocol(id);
+        const updatedProtocols = protocols.filter((protocol) => protocol.id !== id);
+        setProtocols(updatedProtocols);
+        setFilteredProtocols(updatedProtocols);
       } catch (error) {
-        console.error("Error eliminando protocolo:", error)
-        alert(language === "es" ? "Error al eliminar el protocolo" : "Error deleting protocol")
+        alert(language === "es" ? "Error al eliminar el protocolo" : "Error deleting protocol");
+      } finally {
+        setDeletingProtocolId(null);
       }
     }
-  }
+  };
 
   if (isLoading) {
     return (
@@ -130,7 +130,7 @@ export default function ProtocolsPage() {
             {language === "es" ? "Gestione los protocolos médicos del sistema" : "Manage medical system protocols"}
           </p>
         </div>
-        { !isViewer && <Link href="/admin/protocols/new"><Button>Nuevo protocolo</Button></Link> }
+        { !isViewer && <Link href="/admin/protocols/new"><Button>{language === "es" ? "Nuevo protocolo" : "New protocol"}</Button></Link> }
       </div>
 
       <div className="flex items-center space-x-2">
@@ -163,7 +163,7 @@ export default function ProtocolsPage() {
         </Card>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {filteredProtocols.map((protocol) => (
+          {filteredProtocols.map((protocol: Protocol) => (
             <Card key={protocol.id} className="hover:shadow-md transition-shadow">
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between">
@@ -197,14 +197,17 @@ export default function ProtocolsPage() {
                   </div>
                   <div className="flex space-x-2">
                     { !isViewer && <Link href={`/admin/protocols/${protocol.id}`}><Button variant="outline" size="sm"><Edit className="h-4 w-4" /></Button></Link> }
-                    { !isViewer && <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => deleteProtocol(protocol.id)}
-                      className="text-red-600 hover:text-red-700"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button> }
+                    {isAdmin && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => deleteProtocol(protocol.id)}
+                        className="text-red-600 hover:text-red-700"
+                        disabled={deletingProtocolId === protocol.id}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
                   </div>
                 </div>
               </CardContent>

@@ -23,7 +23,6 @@ export default function LoginPage() {
 
   // Limpiar localStorage al cargar la página
   useEffect(() => {
-    console.log("Limpiando localStorage al cargar página de login...")
     authUtils.clearAuth()
   }, [])
 
@@ -32,17 +31,9 @@ export default function LoginPage() {
     setError("")
     setIsLoading(true)
 
-    console.log("=== INICIO LOGIN ADMIN ===")
-    console.log("Username:", username)
-    console.log("Password:", password ? "[PRESENTE]" : "[VACÍO]")
-    console.log("API Base URL:", config.API_BASE_URL)
-
     try {
       // Limpiar datos previos antes de empezar
-      console.log("Limpiando datos previos...")
       authUtils.clearAuth()
-
-      console.log("Llamando a API de login admin...")
 
       const response = await fetch(`${config.API_BASE_URL}/users/login`, {
         method: "POST",
@@ -56,92 +47,45 @@ export default function LoginPage() {
         }),
       })
 
-      console.log("Response status:", response.status)
-
       if (!response.ok) {
         let errorMessage = `Error ${response.status}: ${response.statusText}`
         try {
           const errorData = await response.json()
-          console.log("Error data:", errorData)
           errorMessage = errorData.message || errorMessage
         } catch (e) {
-          console.log("No se pudo parsear error como JSON")
+          //
         }
         throw new Error(errorMessage)
       }
 
-      const responseData = await response.json()
-      console.log("Login exitoso, respuesta recibida:", responseData)
-
-      // Verificar estructura de respuesta
-      if (!responseData.id || !responseData.username || !responseData.token) {
-        console.error("Respuesta incompleta del servidor:", responseData)
-        throw new Error("Respuesta del servidor incompleta")
+      const responseData = await response.json();
+      const user = responseData.data;
+      if (!user.id || !user.username) {
+        throw new Error("Respuesta del servidor incompleta");
       }
-
-      // Preparar datos del usuario SIN el token
       const userData = {
-        id: responseData.id,
-        username: responseData.username,
-        email: responseData.email,
-        role: responseData.role,
-        name: responseData.username,
-      }
-
-      console.log("Datos del usuario preparados (sin token):", userData)
-      console.log("Token separado:", responseData.token ? "[PRESENTE]" : "[AUSENTE]")
-
-      // Guardar token PRIMERO
-      console.log("Guardando token...")
-      authUtils.setToken(responseData.token)
-
-      // Luego guardar datos del usuario
-      console.log("Guardando datos del usuario...")
-      authUtils.setUser(userData)
-
-      // Verificar que se guardó correctamente
-      console.log("Verificando datos guardados...")
-      const savedUser = authUtils.getUser()
-      const savedToken = authUtils.getToken()
-      const isAuth = authUtils.isAuthenticated()
-
-      console.log("Verificación - Usuario guardado:", savedUser)
-      console.log("Verificación - Token guardado:", savedToken ? "[PRESENTE]" : "[AUSENTE]")
-      console.log("Verificación - isAuthenticated:", isAuth)
-
-      if (!isAuth) {
-        console.error("Error: isAuthenticated devolvió false después de guardar")
-        console.error("Contenido completo de localStorage:")
-        for (let i = 0; i < localStorage.length; i++) {
-          const key = localStorage.key(i)
-          const value = localStorage.getItem(key!)
-          console.error(`- ${key}: ${value}`)
-        }
-        throw new Error("Error guardando datos de autenticación")
-      }
-
-      console.log("Autenticación exitosa, redirigiendo a dashboard...")
-
-      // Usar replace en lugar de push para evitar volver atrás
-      router.replace("/admin/dashboard")
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        role: user.role,
+        name: user.username,
+      };
+      authUtils.setUser(userData);
+      const savedUser = authUtils.getUser();
+      router.replace("/admin/dashboard");
     } catch (err: any) {
-      console.log("=== ERROR EN LOGIN ADMIN ===")
-      console.error("Error completo:", err)
-
       let errorMessage = "Error al iniciar sesión. Por favor, inténtelo de nuevo."
 
       if (err.message) {
         errorMessage = err.message
       }
 
-      console.log("Mostrando error al usuario:", errorMessage)
       setError(errorMessage)
 
       // Limpiar datos en caso de error
       authUtils.clearAuth()
     } finally {
       setIsLoading(false)
-      console.log("=== FIN LOGIN ADMIN ===")
     }
   }
 

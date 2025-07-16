@@ -52,7 +52,6 @@ export default function DashboardPage() {
     // Cargar usuario
     try {
       const storedUser = authUtils.getUser()
-      console.log("Usuario almacenado:", storedUser)
       if (storedUser) {
         setUser({
           id: storedUser.id,
@@ -60,10 +59,9 @@ export default function DashboardPage() {
           role: storedUser.role,
           username: storedUser.username,
         })
-        console.log("Usuario cargado:", storedUser)
       }
     } catch (error) {
-      console.error("Error cargando usuario:", error)
+      // console.error("Error cargando usuario:", error)
     } finally {
       setUserLoaded(true)
     }
@@ -77,45 +75,31 @@ export default function DashboardPage() {
     setError(null)
 
     try {
-      console.log("=== INICIANDO CARGA DE DATOS DEL DASHBOARD ===")
-
       // Cargar formularios
       try {
-        console.log("Cargando formularios...")
         const forms = await formsApi.getForms()
-        console.log("✅ Formularios cargados:", forms.length)
         setStats((prev) => ({ ...prev, totalForms: forms.length }))
       } catch (error) {
-        console.error("❌ Error cargando formularios:", error)
         setStats((prev) => ({ ...prev, totalForms: 0 }))
       }
 
       // Cargar protocolos
       try {
-        console.log("Cargando protocolos...")
         const protocols = await protocolsApi.getProtocols()
-        console.log("✅ Protocolos cargados:", protocols.length)
         setStats((prev) => ({ ...prev, totalProtocols: protocols.length }))
       } catch (error) {
-        console.error("❌ Error cargando protocolos:", error)
         setStats((prev) => ({ ...prev, totalProtocols: 0 }))
       }
 
       // Cargar pacientes
       try {
-        console.log("Cargando pacientes...")
         const patients = await patientsApi.getPatients()
-        console.log("✅ Pacientes cargados:", patients.length)
         setStats((prev) => ({ ...prev, totalPatients: patients.length }))
       } catch (error) {
-        console.error("❌ Error cargando pacientes:", error)
         setStats((prev) => ({ ...prev, totalPatients: 0 }))
       }
 
-      console.log("=== DATOS DEL DASHBOARD CARGADOS ===")
-      console.log("Stats finales:", stats)
     } catch (error) {
-      console.error("❌ Error general cargando dashboard:", error)
       setError(language === "es" ? "Error cargando los datos del dashboard" : "Error loading dashboard data")
     } finally {
       setIsLoading(false)

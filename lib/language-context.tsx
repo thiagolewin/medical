@@ -2,6 +2,8 @@
 
 import type React from "react"
 import { createContext, useContext, useState, useEffect } from "react"
+const es = require("../locales/es.json");
+const en = require("../locales/en.json");
 
 type Language = "es" | "en"
 
@@ -44,4 +46,13 @@ export function useLanguage() {
     throw new Error("useLanguage must be used within a LanguageProvider")
   }
   return context
+}
+
+export function useTranslation() {
+  const { language } = useLanguage();
+  const translations = language === "es" ? es : en;
+  function t(key: string): string {
+    return translations[key] || key;
+  }
+  return { t, language };
 }

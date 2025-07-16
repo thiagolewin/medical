@@ -4,23 +4,19 @@ const API_BASE_URL = config.API_BASE_URL
 const TOKEN_KEY = config.TOKEN_KEY
 
 // Helper function to get auth headers
-const getAuthHeaders = () => {
-  const token = localStorage.getItem(TOKEN_KEY)
-  return {
-    "Content-Type": "application/json",
-    "ngrok-skip-browser-warning": "true",
-    ...(token && { Authorization: `Bearer ${token}` }),
-  }
-}
+const getAuthHeaders = () => ({
+  "Content-Type": "application/json",
+  "ngrok-skip-browser-warning": "true",
+});
 
 // Helper function to handle API responses
-export const handleResponse = async (response: Response) => {
-  if (!response.ok) {
-    const errorText = await response.text()
-    throw new Error(`HTTP ${response.status}: ${errorText}`)
+export const handleApiResponse = async (response: Response) => {
+  const json = await response.json();
+  if (json.error) {
+    throw new Error(json.message || "Error desconocido");
   }
-  return response.json()
-}
+  return json.data;
+};
 
 // Forms API
 export const formsApi = {
@@ -28,14 +24,14 @@ export const formsApi = {
     const response = await fetch(`${API_BASE_URL}/forms`, {
       headers: getAuthHeaders(),
     })
-    return handleResponse(response)
+    return handleApiResponse(response)
   },
 
   getForm: async (id: number) => {
     const response = await fetch(`${API_BASE_URL}/forms/${id}`, {
       headers: getAuthHeaders(),
     })
-    return handleResponse(response)
+    return handleApiResponse(response)
   },
 
   createForm: async (formData: any) => {
@@ -44,7 +40,7 @@ export const formsApi = {
       headers: getAuthHeaders(),
       body: JSON.stringify(formData),
     })
-    return handleResponse(response)
+    return handleApiResponse(response)
   },
 
   updateForm: async (id: number, formData: any) => {
@@ -53,7 +49,7 @@ export const formsApi = {
       headers: getAuthHeaders(),
       body: JSON.stringify(formData),
     })
-    return handleResponse(response)
+    return handleApiResponse(response)
   },
 
   deleteForm: async (id: number) => {
@@ -61,7 +57,7 @@ export const formsApi = {
       method: "DELETE",
       headers: getAuthHeaders(),
     })
-    return handleResponse(response)
+    return handleApiResponse(response)
   },
 }
 
@@ -71,14 +67,14 @@ export const protocolsApi = {
     const response = await fetch(`${API_BASE_URL}/protocols`, {
       headers: getAuthHeaders(),
     })
-    return handleResponse(response)
+    return handleApiResponse(response)
   },
 
   getProtocol: async (id: number) => {
     const response = await fetch(`${API_BASE_URL}/protocols/${id}`, {
       headers: getAuthHeaders(),
     })
-    return handleResponse(response)
+    return handleApiResponse(response)
   },
 
   createProtocol: async (protocolData: any) => {
@@ -87,7 +83,7 @@ export const protocolsApi = {
       headers: getAuthHeaders(),
       body: JSON.stringify(protocolData),
     })
-    return handleResponse(response)
+    return handleApiResponse(response)
   },
 
   updateProtocol: async (id: number, protocolData: any) => {
@@ -96,7 +92,7 @@ export const protocolsApi = {
       headers: getAuthHeaders(),
       body: JSON.stringify(protocolData),
     })
-    return handleResponse(response)
+    return handleApiResponse(response)
   },
 
   deleteProtocol: async (id: number) => {
@@ -104,14 +100,14 @@ export const protocolsApi = {
       method: "DELETE",
       headers: getAuthHeaders(),
     })
-    return handleResponse(response)
+    return handleApiResponse(response)
   },
 
   getProtocolForms: async (protocolId: number) => {
     const response = await fetch(`${API_BASE_URL}/protocols/${protocolId}/forms`, {
       headers: getAuthHeaders(),
     })
-    return handleResponse(response)
+    return handleApiResponse(response)
   },
 
   updateProtocolForms: async (protocolId: number, formsData: any) => {
@@ -120,7 +116,7 @@ export const protocolsApi = {
       headers: getAuthHeaders(),
       body: JSON.stringify(formsData),
     })
-    return handleResponse(response)
+    return handleApiResponse(response)
   },
 
   // Nueva función: agregar formulario a protocolo
@@ -130,7 +126,7 @@ export const protocolsApi = {
       headers: getAuthHeaders(),
       body: JSON.stringify(data),
     })
-    return handleResponse(response)
+    return handleApiResponse(response)
   },
 }
 
@@ -140,14 +136,14 @@ export const patientsApi = {
     const response = await fetch(`${API_BASE_URL}/patients`, {
       headers: getAuthHeaders(),
     })
-    return handleResponse(response)
+    return handleApiResponse(response)
   },
 
   getPatient: async (id: number) => {
     const response = await fetch(`${API_BASE_URL}/patients/${id}`, {
       headers: getAuthHeaders(),
     })
-    return handleResponse(response)
+    return handleApiResponse(response)
   },
 
   createPatient: async (patientData: any) => {
@@ -156,7 +152,7 @@ export const patientsApi = {
       headers: getAuthHeaders(),
       body: JSON.stringify(patientData),
     })
-    return handleResponse(response)
+    return handleApiResponse(response)
   },
 
   updatePatient: async (id: number, patientData: any) => {
@@ -165,7 +161,7 @@ export const patientsApi = {
       headers: getAuthHeaders(),
       body: JSON.stringify(patientData),
     })
-    return handleResponse(response)
+    return handleApiResponse(response)
   },
 
   deletePatient: async (id: number) => {
@@ -173,14 +169,14 @@ export const patientsApi = {
       method: "DELETE",
       headers: getAuthHeaders(),
     })
-    return handleResponse(response)
+    return handleApiResponse(response)
   },
 
   getNationalities: async () => {
     const response = await fetch(`${API_BASE_URL}/patients/nationalities`, {
       headers: getAuthHeaders(),
     })
-    return handleResponse(response)
+    return handleApiResponse(response)
   },
 }
 
@@ -190,14 +186,14 @@ export const patientProtocolsApi = {
     const response = await fetch(`${API_BASE_URL}/patient-protocols/protocol/${protocolId}`, {
       headers: getAuthHeaders(),
     })
-    return handleResponse(response)
+    return handleApiResponse(response)
   },
 
   getProtocolsByPatient: async (patientId: number) => {
     const response = await fetch(`${API_BASE_URL}/patient-protocols/patient/${patientId}`, {
       headers: getAuthHeaders(),
     })
-    return handleResponse(response)
+    return handleApiResponse(response)
   },
 
   assignPatientToProtocol: async (assignmentData: any) => {
@@ -206,7 +202,7 @@ export const patientProtocolsApi = {
       headers: getAuthHeaders(),
       body: JSON.stringify(assignmentData),
     })
-    return handleResponse(response)
+    return handleApiResponse(response)
   },
 
   updatePatientProtocolAssignments: async (protocolId: number, assignments: any) => {
@@ -215,7 +211,7 @@ export const patientProtocolsApi = {
       headers: getAuthHeaders(),
       body: JSON.stringify(assignments),
     })
-    return handleResponse(response)
+    return handleApiResponse(response)
   },
 
   removePatientFromProtocol: async (patientId: number, protocolId: number) => {
@@ -227,7 +223,7 @@ export const patientProtocolsApi = {
         idProtocolo: protocolId,
       }),
     })
-    return handleResponse(response)
+    return handleApiResponse(response)
   },
 }
 
@@ -237,14 +233,14 @@ export const usersApi = {
     const response = await fetch(`${API_BASE_URL}/users`, {
       headers: getAuthHeaders(),
     })
-    return handleResponse(response)
+    return handleApiResponse(response)
   },
 
   getUser: async (id: number) => {
     const response = await fetch(`${API_BASE_URL}/users/${id}`, {
       headers: getAuthHeaders(),
     })
-    return handleResponse(response)
+    return handleApiResponse(response)
   },
 
   createUser: async (userData: any) => {
@@ -253,7 +249,7 @@ export const usersApi = {
       headers: getAuthHeaders(),
       body: JSON.stringify(userData),
     })
-    return handleResponse(response)
+    return handleApiResponse(response)
   },
 
   updateUser: async (id: number, userData: any) => {
@@ -262,7 +258,7 @@ export const usersApi = {
       headers: getAuthHeaders(),
       body: JSON.stringify(userData),
     })
-    return handleResponse(response)
+    return handleApiResponse(response)
   },
 
   deleteUser: async (id: number) => {
@@ -270,7 +266,7 @@ export const usersApi = {
       method: "DELETE",
       headers: getAuthHeaders(),
     })
-    return handleResponse(response)
+    return handleApiResponse(response)
   },
 }
 
@@ -282,7 +278,7 @@ export const analysisApi = {
       headers: getAuthHeaders(),
       body: JSON.stringify(payload),
     })
-    return handleResponse(response)
+    return handleApiResponse(response)
   },
 }
 
@@ -292,14 +288,14 @@ export const questionsApi = {
     const response = await fetch(`${API_BASE_URL}/questions/form/${formId}`, {
       headers: getAuthHeaders(),
     })
-    return handleResponse(response)
+    return handleApiResponse(response)
   },
 
   getQuestionOptions: async (questionId: number) => {
     const response = await fetch(`${API_BASE_URL}/questions/${questionId}/options`, {
       headers: getAuthHeaders(),
     })
-    return handleResponse(response)
+    return handleApiResponse(response)
   },
 
   createQuestion: async (questionData: any) => {
@@ -308,7 +304,7 @@ export const questionsApi = {
       headers: getAuthHeaders(),
       body: JSON.stringify(questionData),
     })
-    return handleResponse(response)
+    return handleApiResponse(response)
   },
 
   addOption: async (questionId: number, optionData: any) => {
@@ -317,7 +313,7 @@ export const questionsApi = {
       headers: getAuthHeaders(),
       body: JSON.stringify(optionData),
     })
-    return handleResponse(response)
+    return handleApiResponse(response)
   },
 }
 
@@ -327,7 +323,7 @@ export const questionTypesApi = {
     const response = await fetch(`${API_BASE_URL}/question-types`, {
       headers: getAuthHeaders(),
     })
-    return handleResponse(response)
+    return handleApiResponse(response)
   },
   createQuestionType: async (data: { key_name: string, name_es: string, name_en: string }) => {
     const response = await fetch(`${API_BASE_URL}/question-types`, {
@@ -335,7 +331,7 @@ export const questionTypesApi = {
       headers: getAuthHeaders(),
       body: JSON.stringify(data),
     })
-    return handleResponse(response)
+    return handleApiResponse(response)
   },
 }
 
@@ -345,6 +341,6 @@ export const nationalitiesApi = {
     const response = await fetch(`${API_BASE_URL}/patients/nationalities`, {
       headers: getAuthHeaders(),
     })
-    return handleResponse(response)
+    return handleApiResponse(response)
   },
 }

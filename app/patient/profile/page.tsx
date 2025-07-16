@@ -48,11 +48,10 @@ export default function PatientProfilePage() {
           throw new Error("Error al cargar datos del paciente")
         }
 
-        const data = await response.json()
-        setPatient(data)
-        setNewEmail(data.email)
+        const data = await response.json();
+        setPatient(data.data);
+        setNewEmail(data.data.email);
       } catch (error) {
-        console.error("Error cargando datos del paciente:", error)
         setMessage({ type: "error", text: "Error al cargar los datos del perfil" })
       } finally {
         setIsLoading(false)
@@ -101,7 +100,6 @@ export default function PatientProfilePage() {
       setPatient({ ...patient, email: newEmail })
       setMessage({ type: "success", text: "Email actualizado exitosamente" })
     } catch (error) {
-      console.error("Error cambiando email:", error)
       setMessage({ type: "error", text: "Error al cambiar el email. Por favor, inténtelo de nuevo." })
     } finally {
       setIsSaving(false)

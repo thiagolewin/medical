@@ -20,7 +20,7 @@ import { config } from "@/lib/config"
 import { DndContext, closestCenter } from '@dnd-kit/core';
 import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { handleResponse } from '@/lib/api';
+import { handleApiResponse } from '@/lib/api';
 
 interface Form {
   id: number
@@ -47,35 +47,48 @@ interface Patient {
 }
 
 // Componente para ítem draggable
-function DraggableFormItem({ form, index, onDelete, isEditingForm, deletingFormId }: any) {
+function DraggableFormItem({ form, index, onDelete, isEditingForm, deletingFormId, availableForms }: any) {
   const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: form.id });
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
     background: '#fff',
   };
+  const user = typeof window !== "undefined" ? authUtils.getUser() : null;
+  const isAdmin = user?.role === "admin";
+  // Buscar el nombre del formulario por formId
+  const formInfo = availableForms?.find((f: any) => f.id === (form.formId || form.id));
+  const formName = formInfo ? formInfo.name_es : (form.form_name_es || 'Formulario no encontrado');
   return (
-    <div ref={setNodeRef} style={style} {...attributes} {...listeners} className="flex flex-col sm:flex-row sm:items-center justify-between border p-4 rounded-md gap-4 cursor-move">
-      <div className="space-y-1">
-        <div className="flex items-center space-x-2">
-          <span className="font-medium">{index + 1}. {form.form_name_es}</span>
-        </div>
-        <div className="text-sm text-muted-foreground">
-          <span className="font-medium">Retraso:</span> {form.delay_days} días
-        </div>
-        <div className="text-sm text-muted-foreground">
-          {form.repeat_count > 1 && (
-            <>
-              <span className="font-medium">Repeticiones:</span> {form.repeat_count}
-              {form.repeat_interval_days > 0 && ` (cada ${form.repeat_interval_days} días)`}
-            </>
-          )}
+    <div ref={setNodeRef} style={style} className="flex flex-col sm:flex-row sm:items-center justify-between border p-4 rounded-md gap-4 cursor-default">
+      <div className="flex items-center gap-2">
+        {/* Drag handle */}
+        <span {...attributes} {...listeners} className="cursor-move flex items-center">
+          <svg width="20" height="20" fill="none" viewBox="0 0 24 24"><circle cx="7" cy="7" r="1.5" fill="currentColor"/><circle cx="7" cy="12" r="1.5" fill="currentColor"/><circle cx="7" cy="17" r="1.5" fill="currentColor"/><circle cx="12" cy="7" r="1.5" fill="currentColor"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/><circle cx="12" cy="17" r="1.5" fill="currentColor"/><circle cx="17" cy="7" r="1.5" fill="currentColor"/><circle cx="17" cy="12" r="1.5" fill="currentColor"/><circle cx="17" cy="17" r="1.5" fill="currentColor"/></svg>
+        </span>
+        <div className="space-y-1">
+          <div className="flex items-center space-x-2">
+            <span className="font-medium">{index + 1}. {formName}</span>
+          </div>
+          <div className="text-sm text-muted-foreground">
+            <span className="font-medium">Retraso:</span> {form.delay_days ?? form.delayDays} días
+          </div>
+          <div className="text-sm text-muted-foreground">
+            {(form.repeat_count ?? form.repeatCount) > 1 && (
+              <>
+                <span className="font-medium">Repeticiones:</span> {form.repeat_count ?? form.repeatCount}
+                {(form.repeat_interval_days ?? form.repeatIntervalDays) > 0 && ` (cada ${form.repeat_interval_days ?? form.repeatIntervalDays} días)`}
+              </>
+            )}
+          </div>
         </div>
       </div>
       <div className="flex space-x-2">
-        <Button variant="outline" size="icon" onClick={() => onDelete(form.id)} disabled={isEditingForm || deletingFormId === form.id}>
-          <Trash2 className="h-4 w-4" />
-        </Button>
+        {isAdmin && (
+          <Button variant="outline" size="icon" onClick={() => { console.log('Eliminar formulario', form.id); onDelete(form.id); }} disabled={isEditingForm || deletingFormId === form.id}>
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        )}
       </div>
     </div>
   );
@@ -132,7 +145,6 @@ export default function EditProtocolPage() {
         const protocolFormsData = await protocolsApi.getProtocolForms(protocolId)
         setProtocolForms(protocolFormsData)
       } catch (error) {
-        console.error("Error cargando datos:", error)
         alert("Error al cargar el protocolo")
       } finally {
         setIsLoading(false)
@@ -163,7 +175,6 @@ export default function EditProtocolPage() {
           const assignedIds = (assignedPatientsData || []).map((p: any) => p.patient_id || p.id)
           setSelectedPatients(assignedIds)
         } catch (error) {
-          console.error("Error cargando pacientes:", error)
           setPatients([])
           setAssignedPatients([])
         } finally {
@@ -212,10 +223,10 @@ export default function EditProtocolPage() {
   // 3. Render del Select igual que en creación
   const getFormsForSelector = () => availableForms;
 
-  // En el Select de 'Formulario anterior', mostrar id y nombre, y solo formularios que no sean previous_form_id de otro
+  // En el Select de 'Formulario anterior', mostrar id y nombre, y solo formularios que no sean previousFormId de otro
   const getAvailablePreviousForms = () => {
-    // Formularios que no son previous_form_id de ningún otro
-    const usedAsPrevious = protocolForms.map(f => f.previous_form_id).filter(Boolean);
+    // Formularios que no son previousFormId de ningún otro
+    const usedAsPrevious = protocolForms.map(f => f.previousFormId).filter(Boolean);
     return protocolForms.filter(f => !usedAsPrevious.includes(f.id) && f.id !== currentForm?.id);
   };
 
@@ -234,32 +245,26 @@ export default function EditProtocolPage() {
     setIsEditingForm(false);
   }
 
-  // 2. Implementar la función deleteForm que llama al endpoint POST /protocols/{protocolId}/forms/{formProtocolId}
+  // 2. Implementar la función deleteForm que llama al endpoint DELETE /protocols/{protocolId}/forms/{formProtocolId}
   const deleteForm = async (formProtocolId: number) => {
     setDeletingFormId(formProtocolId);
     const url = `${config.API_BASE_URL}/protocols/${protocolId}/forms/${formProtocolId}`;
-    console.log('[DELETE] Intentando borrar formProtocolId:', formProtocolId, 'de protocolo', protocolId, 'URL:', url);
     try {
       const res = await fetch(url, {
-        method: 'POST',
+        method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
           'ngrok-skip-browser-warning': 'true',
-          Authorization: `Bearer ${localStorage.getItem(config.TOKEN_KEY)}`,
         },
       });
-      console.log('[DELETE] Respuesta del backend:', res.status, res.statusText);
-      const text = await res.text();
-      console.log('[DELETE] Respuesta body:', text);
       if (!res.ok) {
+        const text = await res.text();
         alert('Error al borrar el formulario: ' + text);
         setDeletingFormId(null);
         return;
       }
       setProtocolForms(protocolForms.filter(f => f.id !== formProtocolId));
-      alert('Formulario borrado correctamente');
     } catch (err: any) {
-      console.log('[DELETE] Error en catch:', err);
       alert('Error al borrar el formulario: ' + (err?.message || ''));
     } finally {
       setDeletingFormId(null);
@@ -305,7 +310,6 @@ export default function EditProtocolPage() {
         description_en: protocol.descriptionEn,
       }
 
-      console.log("Actualizando protocolo:", protocolData)
       await protocolsApi.updateProtocol(protocolId, protocolData)
 
       // Asignar formularios al protocolo uno por uno
@@ -359,8 +363,6 @@ export default function EditProtocolPage() {
             assigned_by: userId, // ID del usuario logueado
           }
 
-          console.log("Asignando paciente:", assignData)
-
           const assignResponse = await fetch(`${config.API_BASE_URL}/patient-protocols`, {
             method: "POST",
             headers: {
@@ -373,7 +375,6 @@ export default function EditProtocolPage() {
 
           if (!assignResponse.ok) {
             const errorText = await assignResponse.text()
-            console.error(`Error asignando paciente ${patientId}:`, errorText)
           }
         }
 
@@ -393,17 +394,13 @@ export default function EditProtocolPage() {
           })
 
           if (!unassignResponse.ok) {
-            console.error(`Error desasignando paciente ${patientId}`)
           }
         }
       }
 
-      console.log("Protocolo actualizado exitosamente")
-
       // Redirigir a la lista de protocolos
       router.push("/admin/protocols")
     } catch (error) {
-      console.error("Error updating protocol:", error)
       alert("Error al actualizar el protocolo. Por favor, inténtelo de nuevo.")
     } finally {
       setIsSaving(false)
@@ -647,6 +644,7 @@ export default function EditProtocolPage() {
                           onDelete={deleteForm}
                           isEditingForm={isEditingForm}
                           deletingFormId={deletingFormId}
+                          availableForms={availableForms}
                         />
                       ))}
                     </div>

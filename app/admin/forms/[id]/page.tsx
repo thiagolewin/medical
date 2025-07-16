@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { ArrowLeft, Save } from "lucide-react"
 import Link from "next/link"
 import { formsApi } from "@/lib/api"
+import { useTranslation } from "@/lib/language-context"
 
 export default function EditFormPage() {
   const router = useRouter()
@@ -27,6 +28,8 @@ export default function EditFormPage() {
   })
   const [isLoading, setIsLoading] = useState(true)
 
+  const { t } = useTranslation();
+
   useEffect(() => {
     const fetchForm = async () => {
       try {
@@ -40,7 +43,6 @@ export default function EditFormPage() {
           descriptionEn: formData.description_en || "",
         })
       } catch (error) {
-        console.error("Error cargando formulario:", error)
         alert("Error al cargar el formulario")
       } finally {
         setIsLoading(false)
@@ -78,14 +80,11 @@ export default function EditFormPage() {
         description_en: form.descriptionEn,
       }
 
-      console.log("Actualizando formulario:", formData)
       await formsApi.updateForm(formId, formData)
-      console.log("Formulario actualizado exitosamente")
 
       // Redirigir a la lista de formularios
       router.push("/admin/forms")
     } catch (error) {
-      console.error("Error updating form:", error)
       alert("Error al actualizar el formulario. Por favor, inténtelo de nuevo.")
     }
   }
@@ -108,20 +107,20 @@ export default function EditFormPage() {
             </Button>
           </Link>
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Editar formulario</h1>
-            <p className="text-muted-foreground">Modifique la información del formulario</p>
+            <h1 className="text-3xl font-bold tracking-tight">{t('edit_form')}</h1>
+            <p className="text-muted-foreground">{t('modify_form_info')}</p>
           </div>
         </div>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Información del formulario</CardTitle>
-          <CardDescription>Modifique la información básica del formulario</CardDescription>
+          <CardTitle>{t('form_info')}</CardTitle>
+          <CardDescription>{t('modify_basic_form_info')}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="keyName">Clave única</Label>
+            <Label htmlFor="keyName">{t('unique_key')}</Label>
             <Input
               id="keyName"
               name="keyName"
@@ -130,13 +129,13 @@ export default function EditFormPage() {
               onChange={handleKeyNameChange}
             />
             <p className="text-sm text-muted-foreground">
-              Identificador único para el formulario (solo letras minúsculas y guiones bajos)
+              {t('unique_identifier_info')}
             </p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="nameEs">Nombre (Español)</Label>
+              <Label htmlFor="nameEs">{t('name_es')}</Label>
               <Input
                 id="nameEs"
                 name="nameEs"
@@ -146,7 +145,7 @@ export default function EditFormPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="nameEn">Nombre (Inglés)</Label>
+              <Label htmlFor="nameEn">{t('name_en')}</Label>
               <Input
                 id="nameEn"
                 name="nameEn"
@@ -156,7 +155,7 @@ export default function EditFormPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="descriptionEs">Descripción (Español)</Label>
+              <Label htmlFor="descriptionEs">{t('description_es')}</Label>
               <Textarea
                 id="descriptionEs"
                 name="descriptionEs"
@@ -166,7 +165,7 @@ export default function EditFormPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="descriptionEn">Descripción (Inglés)</Label>
+              <Label htmlFor="descriptionEn">{t('description_en')}</Label>
               <Textarea
                 id="descriptionEn"
                 name="descriptionEn"
@@ -181,11 +180,11 @@ export default function EditFormPage() {
 
       <div className="flex justify-end space-x-4">
         <Link href="/admin/forms">
-          <Button variant="outline">Cancelar</Button>
+          <Button variant="outline">{t('cancel')}</Button>
         </Link>
         <Button onClick={saveForm}>
           <Save className="mr-2 h-4 w-4" />
-          Guardar cambios
+          {t('save_changes')}
         </Button>
       </div>
     </div>

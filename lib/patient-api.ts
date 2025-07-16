@@ -1,4 +1,5 @@
 import { config } from "./config"
+import { handleApiResponse } from "./api";
 
 // Tipos para la API de pacientes
 export interface PatientLoginRequest {
@@ -63,6 +64,7 @@ export interface Question {
   question_type_es: string
   question_type_en: string
   options?: QuestionOption[]
+  keynametype?: string // <-- Agregado para soportar el campo del backend
 }
 
 export interface QuestionOption {
@@ -88,47 +90,24 @@ export interface FormInstance {
   form_description_en?: string
 }
 
-// Función helper para hacer requests con autenticación
+// Función helper para hacer requests sin autenticación por token
 const makePatientRequest = async (endpoint: string, options: RequestInit = {}) => {
-  const token = localStorage.getItem(config.PATIENT_TOKEN_KEY)
-
   const headers = {
     "Content-Type": "application/json",
     "ngrok-skip-browser-warning": "true",
-    ...(token && { Authorization: `Bearer ${token}` }),
     ...options.headers,
   }
-
-  console.log(`Making request to: ${config.API_BASE_URL}${endpoint}`)
-
   const response = await fetch(`${config.API_BASE_URL}${endpoint}`, {
     ...options,
     headers,
   })
-
-  if (!response.ok) {
-    const errorText = await response.text()
-    console.error("Error response:", errorText)
-
-    try {
-      const errorData = JSON.parse(errorText)
-      throw new Error(errorData.message || `Error ${response.status}: ${response.statusText}`)
-    } catch (e) {
-      throw new Error(`Error ${response.status}: ${response.statusText}`)
-    }
-  }
-
-  const data = await response.json()
-  return data
+  const data = await handleApiResponse(response);
+  return data;
 }
 
 // API de autenticación de pacientes
 export const patientAuthApi = {
-  login: async (credentials: PatientLoginRequest): Promise<PatientLoginResponse> => {
-    console.log("=== PATIENT LOGIN REQUEST ===")
-    console.log("URL:", `${config.API_BASE_URL}/patients/login`)
-    console.log("Credentials:", { username: credentials.username, password: "[HIDDEN]" })
-
+  login: async (credentials: PatientLoginRequest): Promise<{ data: { id: number; username: string; email: string } }> => {
     const response = await fetch(`${config.API_BASE_URL}/patients/login`, {
       method: "POST",
       headers: {
@@ -138,41 +117,24 @@ export const patientAuthApi = {
       body: JSON.stringify(credentials),
     })
 
-    console.log("Response status:", response.status)
-    console.log("Response headers:", Object.fromEntries(response.headers.entries()))
-
     if (!response.ok) {
       const errorText = await response.text()
-      console.error("Error response text:", errorText)
-
       let errorMessage = `HTTP ${response.status}: ${response.statusText}`
-
       try {
         const errorData = JSON.parse(errorText)
         errorMessage = errorData.message || errorMessage
       } catch (e) {
         errorMessage = errorText || errorMessage
       }
-
       throw new Error(errorMessage)
     }
 
-    const data = await response.json()
-    console.log("Login successful, response data:", {
-      user: data.user,
-      token: data.token ? "[TOKEN PRESENTE]" : "[TOKEN AUSENTE]"
-    })
-    
-    // Validar estructura de respuesta
-    if (!data.user || !data.token) {
-      throw new Error("Respuesta de login inválida: faltan datos del usuario o token")
+    const result = await response.json();
+    const user = result.data;
+    if (!user || !user.id || !user.username || !user.email) {
+      throw new Error("Respuesta de login inválida: datos del usuario incompletos");
     }
-
-    if (!data.user.id || !data.user.username || !data.user.email) {
-      throw new Error("Respuesta de login inválida: datos del usuario incompletos")
-    }
-
-    return data
+    return { data: user };
   },
 
   getProfile: async () => {
@@ -187,27 +149,17 @@ export const patientAuthApi = {
   },
 
   changeEmail: async (patientId: number, newEmail: string) => {
-    console.log("=== CHANGE EMAIL REQUEST ===")
-    console.log("URL:", `${config.API_BASE_URL}/patients/cambiarMail/${patientId}`)
-    console.log("New email:", newEmail)
-
     const response = await fetch(`${config.API_BASE_URL}/patients/cambiarMail/${patientId}`, {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
         "ngrok-skip-browser-warning": "true",
-        ...(localStorage.getItem(config.PATIENT_TOKEN_KEY) && {
-          Authorization: `Bearer ${localStorage.getItem(config.PATIENT_TOKEN_KEY)}`
-        })
       },
       body: JSON.stringify({ mail: newEmail }),
     })
 
-    console.log("Change email response status:", response.status)
-
     if (!response.ok) {
       const errorText = await response.text()
-      console.error("Change email error response:", errorText)
 
       let errorMessage = `HTTP ${response.status}: ${response.statusText}`
 
@@ -222,7 +174,6 @@ export const patientAuthApi = {
     }
 
     const data = await response.json()
-    console.log("Change email successful:", data)
     return data
   },
 }

@@ -10,6 +10,7 @@ import Link from "next/link"
 import { patientProtocolApi } from "@/lib/patient-api"
 import { patientAuthUtils } from "@/lib/patient-auth"
 import { config } from "@/lib/config"
+import { handleApiResponse } from "@/lib/api";
 
 interface FormWithStatus {
   id: number
@@ -58,33 +59,24 @@ export default function PatientFormsPage() {
     startDate: string,
     delayDays: number,
   ): { available: boolean; daysUntil?: number; availableDate: string } => {
-    console.log(`\n=== CALCULANDO DISPONIBILIDAD ===`)
-    console.log("Start date (raw):", startDate)
-    console.log("Delay days:", delayDays)
-
     // Crear fecha de inicio del protocolo
     const protocolStart = new Date(startDate)
-    console.log("Protocol start:", protocolStart.toISOString())
 
     // Crear fecha disponible sumando delay_days
     const availableDate = new Date(protocolStart)
     availableDate.setDate(availableDate.getDate() + delayDays)
-    console.log("Available date:", availableDate.toISOString())
 
     // Fecha actual
     const today = new Date()
-    console.log("Today:", today.toISOString())
 
     // Comparación simple: ¿hoy es mayor o igual a la fecha disponible?
     const available = today >= availableDate
-    console.log("Is available?", available)
 
     // Calcular días restantes si no está disponible
     let daysUntil = 0
     if (!available) {
       const diffTime = availableDate.getTime() - today.getTime()
       daysUntil = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-      console.log("Days until available:", daysUntil)
     }
 
     const result = {
@@ -92,18 +84,16 @@ export default function PatientFormsPage() {
       daysUntil: available ? undefined : daysUntil,
       availableDate: availableDate.toISOString(),
     }
-
-    console.log("Final result:", result)
-    console.log("=== FIN CÁLCULO ===\n")
     return result
   }
 
   useEffect(() => {
     const fetchWithCheck = async (url: string) => {
-      const res = await fetch(url)
-      if (!res.ok) throw new Error(`Error al cargar: ${url}`)
-      return res.json()
-    }
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`Error al cargar: ${url}`);
+      const json = await res.json();
+      return json.data;
+    };
 
     const loadPatientForms = async () => {
       try {
@@ -403,7 +393,6 @@ export default function PatientFormsPage() {
                           </Button>
                         ) : form.is_available ? (
                           <>
-                            {console.log('Form:', form.id, 'protocol_id:', form.protocol_id, 'patient_protocol_id:', form.patient_protocol_id)}
                             {form.protocol_id && form.patient_protocol_id ? (
                               <Link
                                 href={`/patient/forms/${form.id}?protocol_id=${form.protocol_id}&patient_protocol_id=${form.patient_protocol_id}`}

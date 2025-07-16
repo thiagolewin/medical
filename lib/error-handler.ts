@@ -30,8 +30,6 @@ export class ValidationError extends ApiError {
 
 // Función para manejar errores de forma consistente
 export function handleApiError(error: unknown): ApiError {
-  console.error("API Error:", error)
-
   if (error instanceof ApiError) {
     return error
   }

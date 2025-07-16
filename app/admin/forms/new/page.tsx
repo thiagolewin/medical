@@ -5,7 +5,7 @@ import type React from "react"
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { formsApi, questionTypesApi, questionsApi } from "@/lib/api"
-import { useLanguage } from "@/lib/language-context"
+import { useTranslation } from "@/lib/language-context"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -52,7 +52,7 @@ interface Option {
 
 export default function NewFormPage() {
   const router = useRouter()
-  const { language } = useLanguage()
+  const { t, language } = useTranslation();
   const [form, setForm] = useState({
     keyName: "",
     nameEs: "",
@@ -106,7 +106,6 @@ export default function NewFormPage() {
 
         setQuestionTypes([...filteredTypes, numbersOption])
       } catch (error) {
-        console.error("Error cargando tipos de pregunta:", error)
         // Fallback a tipos estáticos
         setQuestionTypes([
           { id: 1, key_name: "text", name_es: "Texto", name_en: "Text" },
@@ -306,11 +305,9 @@ export default function NewFormPage() {
 
       if (existingType) {
         // Ya existe, usar ese ID
-        console.log("Tipo de pregunta ya existe:", existingType)
         return existingType.id
       } else {
         // No existe, crear nuevo
-        console.log("Creando nuevo tipo de pregunta:", { keyName, nameEs, nameEn })
 
         const newType = await questionTypesApi.createQuestionType({
           key_name: keyName,
@@ -318,11 +315,9 @@ export default function NewFormPage() {
           name_en: nameEn,
         })
 
-        console.log("Nuevo tipo creado:", newType)
         return newType.id
       }
     } catch (error) {
-      console.error("Error creando/encontrando tipo de pregunta:", error)
       throw new Error(
         language === "es"
           ? `Error al crear el tipo de pregunta numérica ${min}-${max}`
@@ -409,9 +404,7 @@ export default function NewFormPage() {
         description_en: form.descriptionEn,
       }
 
-      console.log("Creando formulario:", formData)
       const formResponse = await formsApi.createForm(formData)
-      console.log("Formulario creado:", formResponse)
 
       const createdFormId = formResponse.id
 
@@ -427,9 +420,7 @@ export default function NewFormPage() {
           order_in_form: question.orderInForm,
         }
 
-        console.log("Creando pregunta:", questionData)
         const questionResponse = await questionsApi.createQuestion(questionData)
-        console.log("Pregunta creada:", questionResponse)
 
         // Si la pregunta tiene opciones, crearlas
         if (question.options && question.options.length > 0) {
@@ -449,7 +440,6 @@ export default function NewFormPage() {
               order_in_option: option.orderInOption,
             }
 
-            console.log("Creando opción:", optionData)
             await questionsApi.addOption(questionResponse.id, optionData)
           }
         }
@@ -473,7 +463,6 @@ export default function NewFormPage() {
             order_in_option: question.options.length + 1,
           }
 
-          console.log("Agregando opción 'Otra, especificar':", otherOptionData)
           await questionsApi.addOption(questionResponse.id, otherOptionData)
         }
       }
@@ -481,7 +470,6 @@ export default function NewFormPage() {
       // Formulario creado exitosamente, redirigir
       router.push("/admin/forms")
     } catch (error) {
-      console.error("Error creating form:", error)
       alert(
         language === "es"
           ? "Error al crear el formulario. Por favor, inténtelo de nuevo."
@@ -526,6 +514,7 @@ export default function NewFormPage() {
       type &&
       (type.key_name === "optionandtext" ||
         type.key_name === "optionmultipleandtext" ||
+        type.key_name === "optionmulitpleandtext" || // typo soportado
         type.key_name === "optiondropdownandtext")
     )
   }

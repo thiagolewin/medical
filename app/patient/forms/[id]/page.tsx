@@ -13,8 +13,12 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { ArrowLeft, Send, AlertCircle, CheckCircle } from "lucide-react"
 import Link from "next/link"
 import { patientFormApi, patientProtocolApi } from "@/lib/patient-api"
-import type { Question, FormInstance, QuestionOption } from "@/lib/patient-api"
+import type { Question as BaseQuestion, FormInstance, QuestionOption } from "@/lib/patient-api"
 import { useLanguage } from "@/lib/language-context"
+
+interface Question extends BaseQuestion {
+  keynametype?: string;
+}
 
 export default function FormDetailPage() {
   const router = useRouter()
@@ -44,19 +48,12 @@ export default function FormDetailPage() {
         setIsLoading(true)
         setError("")
 
-        console.log("=== CARGANDO DATOS DEL FORMULARIO ===")
-        console.log("Form ID:", formId)
-        console.log("Protocol ID:", protocolId)
-        console.log("Patient Protocol ID:", patientProtocolId)
-
         if (!protocolId) {
           throw new Error("Protocol ID es requerido")
         }
 
         // 1. Obtener los formularios del protocolo para encontrar el protocol_form_id
-        console.log("1. Obteniendo formularios del protocolo...")
         const protocolForms = await patientProtocolApi.getProtocolForms(Number.parseInt(protocolId))
-        console.log("Protocol forms:", protocolForms)
 
         // Encontrar el protocol_form_id que corresponde a este form_id
         const matchingProtocolForm = protocolForms.find((pf) => pf.form_id === Number.parseInt(formId))
@@ -64,40 +61,34 @@ export default function FormDetailPage() {
           throw new Error("No se encontró el formulario en este protocolo")
         }
 
-        console.log("Matching protocol form:", matchingProtocolForm)
         setProtocolFormId(matchingProtocolForm.id)
 
         // 2. Cargar preguntas del formulario
-        console.log("2. Cargando preguntas del formulario...")
         const formQuestions = await patientFormApi.getFormQuestions(Number.parseInt(formId))
-        console.log("Preguntas cargadas:", formQuestions)
 
         // 3. Cargar opciones para preguntas que las tengan
-        console.log("3. Cargando opciones de preguntas...")
         const questionsWithOptions = await Promise.all(
           formQuestions.map(async (question) => {
+            // Usar keynametype para decidir si hay que traer opciones
+            const keyType = question.keynametype || question.key_name || "";
             if (
-              question.question_type_id === 2 || // optionandtext
-              question.question_type_id === 6 || // optionmultipleandtext
-              question.question_type_id === 4 // optiondropdownandtext
+              keyType === "optionandtext" ||
+              keyType === "optionmulitpleandtext" ||
+              keyType === "optiondropdownandtext"
             ) {
               try {
-                const options = await patientFormApi.getQuestionOptions(question.id)
-                console.log(`Opciones para pregunta ${question.id}:`, options)
-                return { ...question, options }
+                const options = await patientFormApi.getQuestionOptions(question.id);
+                return { ...question, options };
               } catch (error) {
-                console.error(`Error cargando opciones para pregunta ${question.id}:`, error)
-                return question
+                return question;
               }
             }
-            return question
-          }),
-        )
+            return question;
+          })
+        );
 
-        console.log("Preguntas con opciones:", questionsWithOptions)
         setQuestions(questionsWithOptions)
       } catch (error) {
-        console.error("Error cargando datos del formulario:", error)
         setError(language === "es" ? "Error al cargar el formulario" : "Error loading form")
       } finally {
         setIsLoading(false)
@@ -117,9 +108,6 @@ export default function FormDetailPage() {
   }
 
   const handleOptionSelect = (questionId: number, option: QuestionOption, value: string) => {
-    console.log(`Opción seleccionada para pregunta ${questionId}:`, option)
-    console.log(`Key name de la opción:`, option.key_name)
-
     setSelectedOptions((prev) => ({
       ...prev,
       [questionId]: option,
@@ -141,9 +129,6 @@ export default function FormDetailPage() {
   }
 
   const handleCheckboxOptionSelect = (questionId: number, option: QuestionOption, checked: boolean) => {
-    console.log(`Checkbox ${checked ? "seleccionado" : "deseleccionado"} para pregunta ${questionId}:`, option)
-    console.log(`Key name de la opción:`, option.key_name)
-
     const currentValues = responses[questionId] || []
     const currentOptions = selectedOptions[questionId] || []
 
@@ -182,7 +167,6 @@ export default function FormDetailPage() {
   }
 
   const handleOtherTextChange = (questionId: number, value: string) => {
-    console.log(`Texto 'otra' cambiado para pregunta ${questionId}:`, value)
     setOtherResponses((prev) => ({
       ...prev,
       [questionId]: value,
@@ -191,18 +175,11 @@ export default function FormDetailPage() {
 
   const isOtherSelected = (questionId: number) => {
     const selectedOption = selectedOptions[questionId]
-    console.log(`Verificando si 'otra' está seleccionada para pregunta ${questionId}:`, selectedOption)
 
     if (Array.isArray(selectedOption)) {
       const hasOther = selectedOption.some((opt: QuestionOption) => {
-        console.log(
-          `Verificando opción en array:`,
-          opt.key_name,
-          opt.key_name?.startsWith("otra_") || opt.key_name === "other",
-        )
         return opt.key_name?.startsWith("otra_") || opt.key_name === "other"
       })
-      console.log(`Resultado para array:`, hasOther)
       return hasOther
     }
 
@@ -210,11 +187,9 @@ export default function FormDetailPage() {
       const hasOther =
         (selectedOption as QuestionOption).key_name?.startsWith("otra_") ||
         (selectedOption as QuestionOption).key_name === "other"
-      console.log(`Resultado para opción única:`, hasOther)
       return hasOther
     }
 
-    console.log(`No hay opción 'otra' seleccionada`)
     return false
   }
 
@@ -274,10 +249,7 @@ export default function FormDetailPage() {
 
     setIsSubmitting(true)
     try {
-      console.log("=== ENVIANDO FORMULARIO ===")
-
       // 1. Crear instancia del formulario
-      console.log("1. Creando instancia del formulario...")
       const today = new Date().toISOString().split("T")[0] // YYYY-MM-DD format
 
       const instanceData = {
@@ -287,13 +259,10 @@ export default function FormDetailPage() {
         completed_at: new Date().toISOString(),
       }
 
-      console.log("Datos para crear instancia:", instanceData)
       const createdInstance = await patientFormApi.createFormInstance(instanceData)
-      console.log("Instancia creada:", createdInstance)
       setFormInstance(createdInstance)
 
       // 2. Enviar respuestas individuales - SIEMPRE EN ESPAÑOL
-      console.log("2. Enviando respuestas...")
       for (const question of questions) {
         const response = responses[question.id]
         const selectedOption = selectedOptions[question.id]
@@ -325,7 +294,6 @@ export default function FormDetailPage() {
                   answer_option_id: answerOptionId ?? undefined,
                 }
 
-                console.log(`Enviando respuesta checkbox ${i + 1} para pregunta ${question.id}:`, responseData)
                 await patientFormApi.submitResponse(responseData)
               }
             }
@@ -353,7 +321,6 @@ export default function FormDetailPage() {
                 answer_option_id: answerOptionId ?? undefined,
               }
 
-              console.log(`Enviando respuesta para pregunta ${question.id}:`, responseData)
               await patientFormApi.submitResponse(responseData)
             }
             // Para preguntas de texto libre y números
@@ -365,22 +332,20 @@ export default function FormDetailPage() {
                 answer_option_id: undefined,
               }
 
-              console.log(`Enviando respuesta de texto libre para pregunta ${question.id}:`, responseData)
               await patientFormApi.submitResponse(responseData)
             }
           } catch (error) {
-            console.error(`Error enviando respuesta para pregunta ${question.id}:`, error)
+            // console.error(`Error enviando respuesta para pregunta ${question.id}:`, error)
           }
         }
       }
 
-      console.log("Formulario enviado exitosamente")
       setSuccess(language === "es" ? "¡Formulario enviado correctamente!" : "Form submitted successfully!")
 
       // Redirigir inmediatamente a /patient/forms
       router.push("/patient/forms")
     } catch (error) {
-      console.error("Error enviando formulario:", error)
+      // console.error("Error enviando formulario:", error)
       setError(language === "es" ? "Error al enviar el formulario" : "Error submitting form")
     } finally {
       setIsSubmitting(false)
@@ -388,8 +353,83 @@ export default function FormDetailPage() {
   }
 
   const renderField = (question: Question) => {
-    switch (question.question_type_id) {
-      case 1: // text - Texto simple
+    const keyName = question.keynametype || "";
+
+    if (keyName === "optionmulitpleandtext") {
+      return (
+        <div className="space-y-3">
+          <div className="space-y-2">
+            {question.options?.map((option) => {
+              const optionText = language === "es" ? option.text_es : option.text_en;
+              return (
+                <div key={option.id} className="flex items-center space-x-2">
+                  <Checkbox
+                    id={`${question.id}-${option.id}`}
+                    checked={(responses[question.id] || []).includes(option.text_es)}
+                    onCheckedChange={(checked) => {
+                      handleCheckboxOptionSelect(question.id, option, checked as boolean);
+                    }}
+                  />
+                  <Label htmlFor={`${question.id}-${option.id}`} className="text-sm leading-relaxed">
+                    {optionText}
+                  </Label>
+                </div>
+              );
+            })}
+          </div>
+          {isOtherSelected(question.id) && (
+            <div className="ml-6 mt-3 p-3 border-l-2 border-blue-200 bg-blue-50/50">
+              <Label htmlFor={`other-checkbox-${question.id}`} className="text-sm mb-2 block font-medium">
+                {language === "es" ? "Especifique:" : "Specify:"}
+              </Label>
+              <Input
+                id={`other-checkbox-${question.id}`}
+                value={otherResponses[question.id] || ""}
+                onChange={(e) => handleOtherTextChange(question.id, e.target.value)}
+                placeholder={language === "es" ? "Escriba su respuesta..." : "Write your answer..."}
+                className="w-full"
+              />
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    if (keyName.startsWith("numbers")) {
+      const range = getNumbersRange(question);
+      return (
+        <div className="space-y-2">
+          <Input
+            type="number"
+            min={range.min}
+            max={range.max}
+            value={responses[question.id] || ""}
+            onChange={(e) => {
+              const value = Number.parseInt(e.target.value);
+              if (value >= range.min && value <= range.max) {
+                handleInputChange(question.id, e.target.value);
+              } else if (e.target.value === "") {
+                handleInputChange(question.id, "");
+              }
+            }}
+            placeholder={
+              language === "es"
+                ? `Número del ${range.min} al ${range.max}`
+                : `Number from ${range.min} to ${range.max}`
+            }
+            className="w-full"
+          />
+          <p className="text-xs text-gray-500">
+            {language === "es"
+              ? `Ingrese un número entre ${range.min} y ${range.max}`
+              : `Enter a number between ${range.min} and ${range.max}`}
+          </p>
+        </div>
+      );
+    }
+
+    switch (keyName) {
+      case "text":
         return (
           <Input
             type="text"
@@ -398,26 +438,24 @@ export default function FormDetailPage() {
             placeholder={language === "es" ? "Escriba su respuesta..." : "Write your answer..."}
             className="w-full"
           />
-        )
-
-      case 2: // optionandtext - Radio buttons con opción "otra_"
+        );
+      case "optionandtext":
         return (
           <div className="space-y-3">
             <RadioGroup
               value={responses[question.id] || ""}
               onValueChange={(value) => {
-                // Buscar la opción por el texto mostrado (según idioma)
                 const option = question.options?.find((opt) =>
-                  language === "es" ? opt.text_es === value : opt.text_en === value,
-                )
+                  language === "es" ? opt.text_es === value : opt.text_en === value
+                );
                 if (option) {
-                  handleOptionSelect(question.id, option, value)
+                  handleOptionSelect(question.id, option, value);
                 }
               }}
               className="space-y-2"
             >
               {question.options?.map((option) => {
-                const optionText = language === "es" ? option.text_es : option.text_en
+                const optionText = language === "es" ? option.text_es : option.text_en;
                 return (
                   <div key={option.id} className="flex items-center space-x-2">
                     <RadioGroupItem value={optionText} id={`${question.id}-${option.id}`} />
@@ -425,11 +463,9 @@ export default function FormDetailPage() {
                       {optionText}
                     </Label>
                   </div>
-                )
+                );
               })}
             </RadioGroup>
-
-            {/* Campo de texto para "otra_" o "other" en radio */}
             {isOtherSelected(question.id) && (
               <div className="ml-6 mt-3 p-3 border-l-2 border-blue-200 bg-blue-50/50">
                 <Label htmlFor={`other-${question.id}`} className="text-sm mb-2 block font-medium">
@@ -445,60 +481,18 @@ export default function FormDetailPage() {
               </div>
             )}
           </div>
-        )
-
-      case 6: // optionmultipleandtext - Checkboxes múltiples con opción "otra_"
-        return (
-          <div className="space-y-3">
-            <div className="space-y-2">
-              {question.options?.map((option) => {
-                const optionText = language === "es" ? option.text_es : option.text_en
-                return (
-                  <div key={option.id} className="flex items-center space-x-2">
-                    <Checkbox
-                      id={`${question.id}-${option.id}`}
-                      checked={(responses[question.id] || []).includes(option.text_es)} // Verificar contra texto en español
-                      onCheckedChange={(checked) => {
-                        handleCheckboxOptionSelect(question.id, option, checked as boolean)
-                      }}
-                    />
-                    <Label htmlFor={`${question.id}-${option.id}`} className="text-sm leading-relaxed">
-                      {optionText}
-                    </Label>
-                  </div>
-                )
-              })}
-            </div>
-
-            {/* Campo de texto para "otra_" o "other" en checkbox */}
-            {isOtherSelected(question.id) && (
-              <div className="ml-6 mt-3 p-3 border-l-2 border-blue-200 bg-blue-50/50">
-                <Label htmlFor={`other-checkbox-${question.id}`} className="text-sm mb-2 block font-medium">
-                  {language === "es" ? "Especifique:" : "Specify:"}
-                </Label>
-                <Input
-                  id={`other-checkbox-${question.id}`}
-                  value={otherResponses[question.id] || ""}
-                  onChange={(e) => handleOtherTextChange(question.id, e.target.value)}
-                  placeholder={language === "es" ? "Escriba su respuesta..." : "Write your answer..."}
-                  className="w-full"
-                />
-              </div>
-            )}
-          </div>
-        )
-
-      case 4: // optiondropdownandtext - Dropdown con opción "otra_"
+        );
+      case "optiondropdownandtext":
         return (
           <div className="space-y-3">
             <Select
-              value={language === "es" ? responses[question.id] : ""} // Mostrar según idioma pero guardar en español
+              value={language === "es" ? responses[question.id] : ""}
               onValueChange={(value) => {
                 const option = question.options?.find((opt) =>
-                  language === "es" ? opt.text_es === value : opt.text_en === value,
-                )
+                  language === "es" ? opt.text_es === value : opt.text_en === value
+                );
                 if (option) {
-                  handleOptionSelect(question.id, option, value)
+                  handleOptionSelect(question.id, option, value);
                 }
               }}
             >
@@ -507,17 +501,15 @@ export default function FormDetailPage() {
               </SelectTrigger>
               <SelectContent>
                 {question.options?.map((option) => {
-                  const optionText = language === "es" ? option.text_es : option.text_en
+                  const optionText = language === "es" ? option.text_es : option.text_en;
                   return (
                     <SelectItem key={option.id} value={optionText}>
                       {optionText}
                     </SelectItem>
-                  )
+                  );
                 })}
               </SelectContent>
             </Select>
-
-            {/* Campo de texto para "otra_" o "other" en dropdown */}
             {isOtherSelected(question.id) && (
               <div className="mt-3 p-3 border-l-2 border-blue-200 bg-blue-50/50">
                 <Label htmlFor={`other-dropdown-${question.id}`} className="text-sm mb-2 block font-medium">
@@ -533,40 +525,7 @@ export default function FormDetailPage() {
               </div>
             )}
           </div>
-        )
-
-      case 5: // numbers_X_Y - Input numérico con rango dinámico
-        const range = getNumbersRange(question)
-        return (
-          <div className="space-y-2">
-            <Input
-              type="number"
-              min={range.min}
-              max={range.max}
-              value={responses[question.id] || ""}
-              onChange={(e) => {
-                const value = Number.parseInt(e.target.value)
-                if (value >= range.min && value <= range.max) {
-                  handleInputChange(question.id, e.target.value)
-                } else if (e.target.value === "") {
-                  handleInputChange(question.id, "")
-                }
-              }}
-              placeholder={
-                language === "es"
-                  ? `Número del ${range.min} al ${range.max}`
-                  : `Number from ${range.min} to ${range.max}`
-              }
-              className="w-full"
-            />
-            <p className="text-xs text-gray-500">
-              {language === "es"
-                ? `Ingrese un número entre ${range.min} y ${range.max}`
-                : `Enter a number between ${range.min} and ${range.max}`}
-            </p>
-          </div>
-        )
-
+        );
       default:
         return (
           <Input
@@ -576,7 +535,7 @@ export default function FormDetailPage() {
             placeholder={language === "es" ? "Escriba su respuesta..." : "Write your answer..."}
             className="w-full"
           />
-        )
+        );
     }
   }
 

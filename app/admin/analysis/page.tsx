@@ -167,19 +167,14 @@ export default function AnalysisPage() {
 
       // Cargar protocolos
       setLoadingStates((prev) => ({ ...prev, protocols: true }))
-      console.log("Cargando protocolos...")
       const protocolsData = await protocolsApi.getProtocols()
-      console.log("Protocolos cargados:", protocolsData)
       setProtocols(protocolsData)
 
       // Cargar tipos de pregunta
       setLoadingStates((prev) => ({ ...prev, questionTypes: true }))
-      console.log("Cargando tipos de pregunta...")
       const typesData = await questionTypesApi.getQuestionTypes()
-      console.log("Tipos de pregunta cargados:", typesData)
       setQuestionTypes(typesData)
     } catch (error) {
-      console.error("Error loading initial data:", error)
       setError(`${t.errorLoadingData}: ${error}`)
     } finally {
       setLoadingStates((prev) => ({ ...prev, protocols: false, questionTypes: false }))
@@ -211,11 +206,9 @@ export default function AnalysisPage() {
     try {
       setLoadingStates((prev) => ({ ...prev, forms: true }))
       setError("")
-      console.log("Cargando formularios para protocolo:", protocolId)
 
       // Usar el endpoint correcto: GET /protocols/{protocolId}/forms
       const formsData = await protocolsApi.getProtocolForms(protocolId)
-      console.log("Formularios cargados:", formsData)
 
       // Obtener detalles completos de cada formulario usando su form_id
       const formsWithDetails = await Promise.all(
@@ -231,7 +224,6 @@ export default function AnalysisPage() {
               protocol_id: pf.protocol_id,
             }
           } catch (error) {
-            console.error(`Error loading form details for form ${pf.form_id}:`, error)
             return {
               id: pf.id, // Usar el id único de la asignación
               form_id: pf.form_id, // Agregar el form_id base
@@ -246,7 +238,6 @@ export default function AnalysisPage() {
 
       setForms(formsWithDetails)
     } catch (error) {
-      console.error("Error loading forms:", error)
       setError(`${t.errorLoadingData} formularios: ${error}`)
       setForms([])
     } finally {
@@ -258,18 +249,15 @@ export default function AnalysisPage() {
     try {
       setLoadingStates((prev) => ({ ...prev, questions: true }))
       setError("")
-      console.log("Cargando preguntas para formulario:", formId)
       const questionsData = await questionsApi.getQuestionsByForm(formId)
-      console.log("Preguntas cargadas:", questionsData)
 
       // Cargar opciones para cada pregunta
       const questionsWithOptions = await Promise.all(
-        questionsData.map(async (question) => {
+        questionsData.map(async (question: Question) => {
           try {
             const options = await questionsApi.getQuestionOptions(question.id)
             return { ...question, options }
           } catch (error) {
-            console.error(`Error loading options for question ${question.id}:`, error)
             return { ...question, options: [] }
           }
         }),
@@ -277,7 +265,6 @@ export default function AnalysisPage() {
 
       setQuestions(questionsWithOptions)
     } catch (error) {
-      console.error("Error loading questions:", error)
       setError(`${t.errorLoadingData} preguntas: ${error}`)
     } finally {
       setLoadingStates((prev) => ({ ...prev, questions: false }))
@@ -358,7 +345,7 @@ export default function AnalysisPage() {
         if (question && question.options && condition.value) {
           const option = question.options.find((opt) => opt.id.toString() === condition.value);
           if (option) {
-            answerText = language === "es" ? option.text_es : option.text_en;
+            answerText = option.text_es; // Siempre en español
           }
         }
         filtros.push({
@@ -370,11 +357,9 @@ export default function AnalysisPage() {
       });
       const traer = selectedResultFields.length > 0 ? selectedResultFields : [];
       const payload = { filtros, traer };
-      console.log("[ANALYSIS] Payload enviado:", payload);
       const analysisResults = await analysisApi.executeAnalysis(payload);
       setResults(analysisResults || []);
     } catch (error) {
-      console.error("Error executing analysis:", error);
       setError(`${t.errorExecutingAnalysis}: ${error}`);
     } finally {
       setIsLoading(false);
@@ -589,7 +574,11 @@ export default function AnalysisPage() {
                             </SelectContent>
                           </Select>
                         ) : (
-                          <Input value="" disabled placeholder={t.select} />
+                          <Input
+                            value={condition.value}
+                            onChange={e => updateFilterCondition(index, "value", e.target.value)}
+                            placeholder={t.enterValue}
+                          />
                         )}
                       </div>
                     </div>

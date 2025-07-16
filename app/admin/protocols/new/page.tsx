@@ -18,6 +18,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { DndContext, closestCenter } from '@dnd-kit/core';
 import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { useTranslation } from "@/lib/language-context"
 
 interface Form {
   id: number
@@ -73,6 +74,8 @@ export default function NewProtocolPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [isLoadingPatients, setIsLoadingPatients] = useState(true)
 
+  const { t, language } = useTranslation();
+
   // Cargar formularios disponibles al montar el componente
   useEffect(() => {
     const fetchForms = async () => {
@@ -81,7 +84,6 @@ export default function NewProtocolPage() {
         const forms = await formsApi.getForms()
         setAvailableForms(forms || [])
       } catch (error) {
-        console.error("Error cargando formularios:", error)
         setAvailableForms([])
       } finally {
         setIsLoadingForms(false)
@@ -101,7 +103,6 @@ export default function NewProtocolPage() {
           const response = await patientsApi.getPatients()
           setPatients(response || [])
         } catch (error) {
-          console.error("Error cargando pacientes:", error)
           setPatients([])
         } finally {
           setIsLoadingPatients(false)
@@ -239,9 +240,7 @@ export default function NewProtocolPage() {
         description_en: protocol.descriptionEn,
       }
 
-      console.log("Creando protocolo:", protocolData)
       const protocolResponse = await protocolsApi.createProtocol(protocolData)
-      console.log("Protocolo creado:", protocolResponse)
 
       const protocolId = protocolResponse.id
 
@@ -255,7 +254,6 @@ export default function NewProtocolPage() {
           order_in_protocol: form.orderInProtocol,
         }
 
-        console.log("Agregando formulario al protocolo:", formData)
         await protocolsApi.addFormToProtocol(protocolId, form.formId, formData)
       }
 
@@ -278,7 +276,6 @@ export default function NewProtocolPage() {
       // Redirigir a la lista de protocolos
       router.push("/admin/protocols")
     } catch (error) {
-      console.error("Error creating protocol:", error)
       alert("Error al crear el protocolo. Por favor, inténtelo de nuevo.")
     } finally {
       setIsSaving(false)
@@ -317,8 +314,8 @@ export default function NewProtocolPage() {
             </Button>
           </Link>
           <div>
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Nuevo protocolo</h1>
-            <p className="text-muted-foreground">Cree un nuevo protocolo médico</p>
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">{t('new_protocol')}</h1>
+            <p className="text-muted-foreground">{t('create_medical_protocol')}</p>
           </div>
         </div>
       </div>
@@ -350,70 +347,64 @@ export default function NewProtocolPage() {
       {currentStep === 1 && (
         <Card className="w-full">
           <CardHeader>
-            <CardTitle>Información del protocolo</CardTitle>
-            <CardDescription>Ingrese la información básica del protocolo</CardDescription>
+            <CardTitle>{t('basic_protocol_info')}</CardTitle>
+            <CardDescription>{t('enter_basic_protocol_info')}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="keyName">
-                Clave única <span className="text-red-500">*</span>
-              </Label>
+              <Label htmlFor="keyName">{t('unique_key')} <span className="text-red-500">*</span></Label>
               <Input
                 id="keyName"
                 name="keyName"
-                placeholder="ej: post_surgery_protocol"
+                placeholder={t('example_key_name')}
                 value={protocol.keyName}
                 onChange={handleKeyNameChange}
                 required
               />
               <p className="text-sm text-muted-foreground">
-                Identificador único para el protocolo (solo letras minúsculas y guiones bajos)
+                {t('unique_protocol_identifier')}
               </p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="nameEs">
-                  Nombre (Español) <span className="text-red-500">*</span>
-                </Label>
+                <Label htmlFor="nameEs">{t('name_es')} <span className="text-red-500">*</span></Label>
                 <Input
                   id="nameEs"
                   name="nameEs"
-                  placeholder="ej: Protocolo Post-operatorio"
+                  placeholder={t('example_name_es')}
                   value={protocol.nameEs}
                   onChange={handleProtocolChange}
                   required
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="nameEn">
-                  Nombre (Inglés) <span className="text-red-500">*</span>
-                </Label>
+                <Label htmlFor="nameEn">{t('name_en')} <span className="text-red-500">*</span></Label>
                 <Input
                   id="nameEn"
                   name="nameEn"
-                  placeholder="ej: Post-surgery Protocol"
+                  placeholder={t('example_name_en')}
                   value={protocol.nameEn}
                   onChange={handleProtocolChange}
                   required
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="descriptionEs">Descripción (Español)</Label>
+                <Label htmlFor="descriptionEs">{t('description_es')}</Label>
                 <Textarea
                   id="descriptionEs"
                   name="descriptionEs"
-                  placeholder="Descripción del protocolo..."
+                  placeholder={t('protocol_description_es')}
                   value={protocol.descriptionEs}
                   onChange={handleProtocolChange}
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="descriptionEn">Descripción (Inglés)</Label>
+                <Label htmlFor="descriptionEn">{t('description_en')}</Label>
                 <Textarea
                   id="descriptionEn"
                   name="descriptionEn"
-                  placeholder="Protocol description..."
+                  placeholder={t('protocol_description_en')}
                   value={protocol.descriptionEn}
                   onChange={handleProtocolChange}
                 />
@@ -422,7 +413,7 @@ export default function NewProtocolPage() {
           </CardContent>
           <CardFooter className="flex justify-end">
             <Button onClick={nextStep}>
-              Siguiente
+              {t('next')}
               <ChevronRight className="ml-2 h-4 w-4" />
             </Button>
           </CardFooter>
@@ -433,10 +424,10 @@ export default function NewProtocolPage() {
       {currentStep === 2 && (
         <>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <h2 className="text-xl font-semibold">Formularios del protocolo</h2>
+            <h2 className="text-xl font-semibold">{t('protocol_forms')}</h2>
             <Button onClick={addNewForm} disabled={isEditingForm || isLoadingForms}>
               <Plus className="mr-2 h-4 w-4" />
-              Añadir formulario
+              {t('add_form')}
             </Button>
           </div>
 
@@ -444,12 +435,12 @@ export default function NewProtocolPage() {
             <Card className="w-full">
               <CardHeader>
                 <CardTitle>
-                  {protocolForms.some((f) => f.id === currentForm.id) ? "Editar formulario" : "Nuevo formulario"}
+                  {protocolForms.some((f) => f.id === currentForm.id) ? t('edit_form') : t('new_form')}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="formId">Formulario</Label>
+                  <Label htmlFor="formId">{t('form')}</Label>
                   <Select
                     value={currentForm.formId.toString()}
                     onValueChange={(value) => handleFormChange("formId", Number.parseInt(value))}
@@ -457,7 +448,7 @@ export default function NewProtocolPage() {
                   >
                     <SelectTrigger>
                       <SelectValue
-                        placeholder={isLoadingForms ? "Cargando formularios..." : "Seleccione un formulario"}
+                        placeholder={isLoadingForms ? t('loading_forms') : t('select_form')}
                       />
                     </SelectTrigger>
                     <SelectContent>
@@ -472,7 +463,7 @@ export default function NewProtocolPage() {
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="delayDays">Días de retraso</Label>
+                    <Label htmlFor="delayDays">{t('delay_days')}</Label>
                     <Input
                       id="delayDays"
                       type="number"
@@ -483,7 +474,7 @@ export default function NewProtocolPage() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="repeatCount">Repeticiones</Label>
+                    <Label htmlFor="repeatCount">{t('repetitions')}</Label>
                     <Input
                       id="repeatCount"
                       type="number"
@@ -494,7 +485,7 @@ export default function NewProtocolPage() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="repeatIntervalDays">Intervalo entre repeticiones (días)</Label>
+                    <Label htmlFor="repeatIntervalDays">{t('repeat_interval_days')}</Label>
                     <Input
                       id="repeatIntervalDays"
                       type="number"
@@ -515,10 +506,10 @@ export default function NewProtocolPage() {
                     setIsEditingForm(false)
                   }}
                 >
-                  Cancelar
+                  {t('cancel')}
                 </Button>
                 <Button className="w-full sm:w-auto" onClick={saveForm}>
-                  Guardar formulario
+                  {t('save_form')}
                 </Button>
               </CardFooter>
             </Card>
@@ -527,7 +518,7 @@ export default function NewProtocolPage() {
           {protocolForms.length > 0 ? (
             <Card className="w-full">
               <CardHeader>
-                <CardTitle>Formularios del protocolo</CardTitle>
+                <CardTitle>{t('protocol_forms')}</CardTitle>
               </CardHeader>
               <CardContent>
                 <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
@@ -540,6 +531,9 @@ export default function NewProtocolPage() {
                         onEdit={editForm}
                         onDelete={deleteForm}
                         isEditingForm={isEditingForm}
+                        t={t}
+                        availableForms={availableForms}
+                        language={language}
                       />
                     ))}
                   </SortableContext>
@@ -550,7 +544,7 @@ export default function NewProtocolPage() {
             <Card className="w-full">
               <CardContent className="flex flex-col items-center justify-center p-6">
                 <p className="mb-4 text-muted-foreground">
-                  No hay formularios en este protocolo. Añada al menos un formulario.
+                  {t('no_forms_in_protocol')}
                 </p>
               </CardContent>
             </Card>
@@ -559,10 +553,10 @@ export default function NewProtocolPage() {
           <div className="flex flex-col sm:flex-row justify-between gap-2">
             <Button variant="outline" className="w-full sm:w-auto" onClick={prevStep}>
               <ChevronLeft className="mr-2 h-4 w-4" />
-              Anterior
+              {t('previous')}
             </Button>
             <Button className="w-full sm:w-auto" onClick={nextStep}>
-              Siguiente
+              {t('next')}
               <ChevronRight className="ml-2 h-4 w-4" />
             </Button>
           </div>
@@ -574,15 +568,15 @@ export default function NewProtocolPage() {
         <>
           <Card className="w-full">
             <CardHeader>
-              <CardTitle>Asignar pacientes al protocolo</CardTitle>
-              <CardDescription>Seleccione los pacientes que desea asignar a este protocolo</CardDescription>
+              <CardTitle>{t('assign_patients_to_protocol')}</CardTitle>
+              <CardDescription>{t('select_patients_to_assign')}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="relative">
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
                   type="search"
-                  placeholder="Buscar pacientes..."
+                  placeholder={t('search_patients')}
                   className="pl-8"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
@@ -595,7 +589,7 @@ export default function NewProtocolPage() {
                 </div>
               ) : filteredPatients.length === 0 ? (
                 <div className="text-center p-4 border rounded-md">
-                  <p className="text-muted-foreground">No se encontraron pacientes</p>
+                  <p className="text-muted-foreground">{t('no_patients_found')}</p>
                 </div>
               ) : (
                 <div className="border rounded-md overflow-hidden">
@@ -635,12 +629,12 @@ export default function NewProtocolPage() {
                   <div className="flex items-center">
                     <Check className="h-4 w-4 mr-2 text-primary" />
                     <span>
-                      {selectedPatients.length} paciente{selectedPatients.length !== 1 ? "s" : ""} seleccionado
-                      {selectedPatients.length !== 1 ? "s" : ""}
+                      {selectedPatients.length} {t('selected_patient')}
+                      {selectedPatients.length !== 1 ? t('s') : ''}
                     </span>
                   </div>
                   <Button variant="outline" size="sm" onClick={() => setSelectedPatients([])}>
-                    Limpiar selección
+                    {t('clear_selection')}
                   </Button>
                 </div>
               )}
@@ -650,18 +644,18 @@ export default function NewProtocolPage() {
           <div className="flex flex-col sm:flex-row justify-between gap-2">
             <Button variant="outline" className="w-full sm:w-auto" onClick={prevStep}>
               <ChevronLeft className="mr-2 h-4 w-4" />
-              Anterior
+              {t('previous')}
             </Button>
             <Button className="w-full sm:w-auto" onClick={saveProtocol} disabled={isSaving}>
               {isSaving ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Guardando...
+                  {t('saving')}
                 </>
               ) : (
                 <>
                   <Save className="mr-2 h-4 w-4" />
-                  Guardar protocolo
+                  {t('save_protocol')}
                 </>
               )}
             </Button>
@@ -673,25 +667,30 @@ export default function NewProtocolPage() {
 }
 
 // Componente para ítem draggable
-function DraggableFormItem({ form, index, onEdit, onDelete, isEditingForm }: any) {
+function DraggableFormItem({ form, index, onEdit, onDelete, isEditingForm, t, availableForms, language }: any) {
   const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: form.id });
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
     background: '#fff',
   };
+  let formName = form.name_es;
+  if (form.formId && availableForms.length > 0) {
+    const found = availableForms.find((f: any) => f.id === form.formId);
+    if (found) formName = language === 'en' ? found.name_en : found.name_es;
+  }
   return (
     <div ref={setNodeRef} style={style} {...attributes} {...listeners} className="flex flex-col sm:flex-row sm:items-center justify-between border p-4 rounded-md gap-4 cursor-move">
       <div className="space-y-1">
         <div className="flex items-center space-x-2">
-          <span className="font-medium">{index + 1}. {form.form_name_es}</span>
+          <span className="font-medium">{index + 1}. {formName}</span>
         </div>
         <div className="text-sm text-muted-foreground">
-          <span className="font-medium">Retraso:</span> {form.delay_days} días
+          <span className="font-medium">{t('delay')}:</span> {form.delayDays} {t('days')}
         </div>
         <div className="text-sm text-muted-foreground">
-          <span className="font-medium">Repeticiones:</span> {form.repeat_count}
-          {form.repeat_interval_days > 0 && ` (cada ${form.repeat_interval_days} días)`}
+          <span className="font-medium">{t('repetitions')}:</span> {form.repeatCount}
+          {form.repeatIntervalDays > 0 && ` (${t('every')} ${form.repeatIntervalDays} ${t('days')})`}
         </div>
       </div>
       <div className="flex space-x-2">
